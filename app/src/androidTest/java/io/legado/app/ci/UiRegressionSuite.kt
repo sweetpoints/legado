@@ -18,6 +18,7 @@ import org.junit.runners.Suite
     io.legado.app.ui.rss.subscription.RuleSubscriptionHostTest::class,
     io.legado.app.ui.rss.source.manage.FlutterRssManagerUiTest::class,
     io.legado.app.ui.rss.source.manage.RssSourceActivityComposeTest::class,
+    io.legado.app.ui.dict.rule.FlutterDictionaryManagerUiTest::class,
     io.legado.app.ui.rss.favorites.RssFavoriteListRestoreTest::class,
     io.legado.app.ui.rss.favorites.RssFavoriteConfigRestoreTest::class,
     io.legado.app.ui.rss.favorites.RssFavoriteConfigReaderHostTest::class,
