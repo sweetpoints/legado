@@ -582,4 +582,67 @@ class RssSourceManagementViewModelTest {
         runCurrent()
         assertEquals("content://first", model.native(model.state.value.pending!!.nonce)!!.input)
     }
+    @Test fun flutterStableFiltersUseNativeLocalizedLabels() = test {
+        val repo = Repo()
+        val model = model(repo)
+        model.bind(RssSourceManagementLabels("已启用", "已禁用", "需要登录", "未分组"))
+        runCurrent()
+        rssManagerCommand(mapOf("op" to "filter", "value" to "enabled"), model) {}
+        runCurrent()
+        assertEquals("已启用", model.state.value.query)
+        assertEquals(RssSourceManagementFilter.Enabled, repo.filter)
+        rssManagerCommand(mapOf("op" to "filter", "value" to "none"), model) {}
+        runCurrent()
+        assertEquals(RssSourceManagementFilter.NoGroup, repo.filter)
+    }
+
+    @Test fun flutterProtocolRejectsUnknownKeysDuplicateTargetsAndNativeOnlyEffectsBeforeMutation() = test {
+        val repo = Repo()
+        val id = "a".repeat(64)
+        repo.values.value = listOf(RssSourceManagementRow(id, "One", "One", null, true, 0))
+        val model = model(repo)
+        model.bind(labels)
+        runCurrent()
+        val commands = listOf(
+            mapOf("op" to "enabled", "ids" to listOf(id,id), "value" to false),
+            mapOf("op" to "enabled", "ids" to listOf(id), "value" to false, "extra" to true),
+            mapOf("op" to "effect", "value" to "ImportInput", "ids" to emptyList<String>()),
+            mapOf("op" to "dialog", "value" to "ExportResult", "ids" to emptyList<String>()),
+            mapOf("op" to "query", "value" to "short", "start" to 8, "end" to 8),
+        )
+        commands.forEach { command ->
+            assertThrows(IllegalArgumentException::class.java) { rssManagerCommand(command, model) {} }
+        }
+        runCurrent()
+        assertTrue(repo.enabled.isEmpty())
+        assertNull(model.state.value.pending)
+        assertNull(model.state.value.dialog)
+        assertEquals("", model.state.value.query)
+    }
+
+    @Test fun flutterProtocolSelectionAndMoveRetainNativeSessionAndRepositoryAuthority() = test {
+        val repo = Repo()
+        val a = "a".repeat(64); val b = "b".repeat(64)
+        repo.values.value = listOf(
+            RssSourceManagementRow(a, "One", "One", null, true, 0),
+            RssSourceManagementRow(b, "Two", "Two", null, true, 1),
+        )
+        val sessions = Sessions()
+        val model = model(repo, sessions)
+        model.bind(labels)
+        runCurrent()
+        rssManagerCommand(mapOf("op" to "selected", "ids" to listOf(a), "checked" to true), model) {}
+        rssManagerCommand(mapOf("op" to "beginDrag", "ids" to listOf(a)), model) {}
+        rssManagerCommand(mapOf("op" to "dragTo", "ids" to listOf(b), "after" to true), model) {}
+        assertTrue(repo.moves.isEmpty())
+        rssManagerCommand(mapOf("op" to "finishDrag"), model) {}
+        runCurrent()
+        assertEquals(listOf(Triple(a,b,true)), repo.moves)
+        assertEquals(listOf(a), sessions.value!!.selected)
+        val snapshot = rssManagerSnapshot(model.state.value)
+        assertFalse(snapshot.contains("sourceUrl"))
+        assertFalse(snapshot.contains("exportFile"))
+        assertFalse(snapshot.contains("nonce"))
+    }
+
 }

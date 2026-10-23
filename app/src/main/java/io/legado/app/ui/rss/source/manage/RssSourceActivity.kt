@@ -1,15 +1,19 @@
 package io.legado.app.ui.rss.source.manage
 
+import android.content.Intent
 import android.os.Bundle
-import androidx.activity.addCallback
+import android.widget.FrameLayout
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.viewModels
-import androidx.compose.runtime.Composable
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.base.BaseComposeActivity
+import io.legado.app.base.BaseThemedActivity
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.repository.*
 import io.legado.app.ui.association.ImportRssSourceDialog
@@ -23,12 +27,13 @@ import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import java.io.File
+import kotlinx.coroutines.launch
 
 /**
- * Direct Compose source management. Parsing, imports and source cleanup retain their established
- * pipelines.
+ * Flutter presentation with native source management. Parsing, imports and source cleanup retain
+ * their established pipelines.
  */
-class RssSourceActivity : BaseComposeActivity() {
+class RssSourceActivity : BaseThemedActivity() {
     internal val managementModel by
         viewModels<RssSourceManagementViewModel> {
             viewModelFactory {
@@ -75,7 +80,17 @@ class RssSourceActivity : BaseComposeActivity() {
             .also { qrLauncher = it }
     }
 
-    override fun onComposeCreated(savedInstanceState: Bundle?) {
+    private val managerBackCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() = close()
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        // Restored Flutter callbacks must be registered after this native fallback.
+        onBackPressedDispatcher.addCallback(managerBackCallback)
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
         managementModel.bind(
             RssSourceManagementLabels(
                 getString(R.string.enabled),
@@ -85,20 +100,85 @@ class RssSourceActivity : BaseComposeActivity() {
             )
         )
         managementModel.waiting(RssSourceManagementAction.ImportQr)?.let(::registerQr)
-        onBackPressedDispatcher.addCallback(this) { close() }
+        if (rssFragment == null) {
+            supportFragmentManager.beginTransaction()
+                .add(R.id.rss_manager_flutter_container, RssManagerFlutterFragment(), FLUTTER_FRAGMENT_TAG)
+                .commitNow()
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                managementModel.state.collect { state ->
+                    val pending = state.pending ?: return@collect
+                    if (!state.loaded || !ready()) return@collect
+                    try {
+                        val request = managementModel.native(pending.nonce) ?: return@collect
+                        val source = if (pending.action == RssSourceManagementAction.Edit)
+                            request.sourceId?.let { managementModel.source(it) } else null
+                        if (lifecycle.currentState == Lifecycle.State.RESUMED && ready() &&
+                            managementModel.delivered(pending.nonce)) native(request, source)
+                    } catch (error: kotlinx.coroutines.CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        managementModel.delivered(pending.nonce)
+                        managementModel.failed(getString(R.string.error))
+                    }
+                }
+            }
+        }
     }
 
-    private fun close() {
+    internal fun close() {
         if (managementModel.state.value.busy) return
         managementModel.cancelGesture()
-        finish()
+        if (managementModel.state.value.dialog != null) managementModel.cancelDialog()
+        else finish()
     }
 
     private fun ready() = !isFinishing && !isDestroyed && !supportFragmentManager.isStateSaved
 
-    @Composable
-    override fun Content(savedInstanceState: Bundle?) {
-        RssSourceManagementRoute(managementModel, ::ready, ::close, ::native)
+    override fun createContentView() {
+        setContentView(FrameLayout(this).apply { id = R.id.rss_manager_flutter_container })
+    }
+
+    private val rssFragment: RssManagerFlutterFragment?
+        get() = supportFragmentManager.findFragmentByTag(FLUTTER_FRAGMENT_TAG) as? RssManagerFlutterFragment
+
+    override fun onPostResume() {
+        super.onPostResume()
+        rssFragment?.onPostResume()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        rssFragment?.onNewIntent(intent)
+        super.onNewIntent(intent)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        rssFragment?.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        rssFragment?.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        rssFragment?.onUserLeaveHint()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        rssFragment?.onTrimMemory(level)
+    }
+
+    companion object {
+        internal const val FLUTTER_FRAGMENT_TAG = "rss-manager-flutter"
     }
 
     private fun native(request: RssSourceManagementNative, source: RssSource?) {
@@ -148,6 +228,7 @@ class RssSourceActivity : BaseComposeActivity() {
     }
 
     override fun onDestroy() {
+        managerBackCallback.remove()
         qrLauncher?.unregister()
         qrLauncher = null
         super.onDestroy()
