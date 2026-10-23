@@ -259,6 +259,7 @@ class ReplaceEditorHostTest {
             }))
         } finally { field.recycle() }
         var checkpointDiagnostic = "not read"
+        var previousAcknowledgedViewport: Double? = null
         try {
             driver.await("real draft and reverse selection acknowledged before checkpoint") {
                 val actual = renderedState()
@@ -270,32 +271,59 @@ class ReplaceEditorHostTest {
                     "restoring=${actual["restoring"]}, inset=${actual["viewInsetsBottom"]}, " +
                     "offset=${actual["scrollOffset"]}, nativeLength=${native.text.length}, " +
                     "nativeRange=${native.start}..${native.end}"
+                // Setting a selection can schedule caret-reveal scrolling after its field ACK.
+                // Do not seed a saved viewport while that older rendered offset is still in flight.
+                val viewport = (actual["scrollOffset"] as? Number)?.toDouble()
+                val viewportAcknowledged = viewport != null && kotlin.math.abs(viewport - model.state.value.scroll) < 0.5
+                val stableViewport = viewportAcknowledged && previousAcknowledgedViewport == viewport
+                previousAcknowledgedViewport = viewport.takeIf { viewportAcknowledged }
                 name != null && name["text"] == draft && name["start"] == 27 && name["end"] == 4 && name["focused"] == true &&
                     actual["restoring"] == false && (actual["viewInsetsBottom"] as? Number)?.toDouble() == 0.0 &&
-                    native == ReplaceEditorText(draft, 27, 4)
+                    native == ReplaceEditorText(draft, 27, 4) && stableViewport
             }
         } catch (failure: AssertionError) {
             throw AssertionError("${failure.message}; $checkpointDiagnostic", failure)
         }
         // Seed the original saved viewport contract only after field/IME work has settled.
         // The next host must restore this exact offset in the actual Flutter viewport.
+        fun nativeDiagnostic(): String {
+            val state = model.state.value
+            val value = state.draft[ReplaceEditorField.Name]
+            return "vm=${System.identityHashCode(model)}, session=${model.session}, scroll=${state.scroll}, " +
+                "focus=${state.focus}, length=${value.text.length}, range=${value.start}..${value.end}, " +
+                "loaded=${state.loaded}, busy=${state.busy}, editor=${state.editor != null}"
+        }
+        var beforeRecreate = ""
+        var afterRecreate = ""
         scenario!!.onActivity {
             model.scroll(500)
             runBlocking { model.flushDraft() }
             assertEquals(500, model.state.value.scroll)
+            beforeRecreate = "generation=${it.editorCoordinator.generation}, ${nativeDiagnostic()}"
         }
         scenario!!.recreate()
-        scenario!!.onActivity { model = it.viewModel }
+        scenario!!.onActivity {
+            model = it.viewModel
+            afterRecreate = "generation=${it.editorCoordinator.generation}, ${nativeDiagnostic()}"
+        }
         driver.await("native replacement loaded") { model.state.value.loaded }
         scenario!!.onActivity { assertTrue(it.supportFragmentManager.fragments.any { fragment -> fragment is FlutterFragment }) }
         driver.awaitIdentifier("replace-editor-fields")
-        driver.await("actual restored Flutter viewport, focus and reverse selection") {
-            val actual = renderedState() ?: return@await false
-            val name = (actual["fields"] as? Map<*, *>)?.get("Name") as? Map<*, *> ?: return@await false
-            actual["restoring"] == false &&
-                kotlin.math.abs(((actual["scrollOffset"] as? Number)?.toDouble() ?: -1.0) - 500.0) < 0.5 &&
-                name["text"] == draft && name["start"] == 27 && name["end"] == 4 && name["focused"] == true &&
-                model.state.value.scroll == 500
+        var restoredDiagnostic = "not read"
+        try {
+            driver.await("actual restored Flutter viewport, focus and reverse selection") {
+                val actual = renderedState()
+                val name = (actual?.get("fields") as? Map<*, *>)?.get("Name") as? Map<*, *>
+                restoredDiagnostic = "$renderedDiagnostic; actual=" + actual?.filterKeys { it != "fields" } +
+                    "; nameLength=${(name?.get("text") as? String)?.length}, range=${name?.get("start")}..${name?.get("end")}, " +
+                    "focused=${name?.get("focused")}; ${nativeDiagnostic()}"
+                actual != null && name != null && actual["restoring"] == false &&
+                    kotlin.math.abs(((actual["scrollOffset"] as? Number)?.toDouble() ?: -1.0) - 500.0) < 0.5 &&
+                    name["text"] == draft && name["start"] == 27 && name["end"] == 4 && name["focused"] == true &&
+                    model.state.value.scroll == 500
+            }
+        } catch (failure: AssertionError) {
+            throw AssertionError("${failure.message}; before=[$beforeRecreate]; after=[$afterRecreate]; $restoredDiagnostic", failure)
         }
         assertEquals(draft, model.state.value.draft[ReplaceEditorField.Name].text)
         assertEquals(27, model.state.value.draft[ReplaceEditorField.Name].start)
