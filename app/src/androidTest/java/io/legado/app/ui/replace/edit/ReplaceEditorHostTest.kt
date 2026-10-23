@@ -90,6 +90,71 @@ class ReplaceEditorHostTest {
         }
     }
 
+    /** Native-to-Dart read only: observe actual controllers/viewport, never mutate the page. */
+    private fun renderedState(): Map<*, *>? {
+        val read = AtomicReference<Map<*, *>?>()
+        val completed = java.util.concurrent.CountDownLatch(1)
+        var requested = false
+        scenario!!.onActivity { activity ->
+            val fragment = activity.supportFragmentManager.fragments.filterIsInstance<FlutterFragment>().singleOrNull()
+            val engine = fragment?.flutterEngine
+            if (engine != null) {
+                requested = true
+                val generation = activity.editorCoordinator.generation
+                io.flutter.plugin.common.MethodChannel(engine.dartExecutor.binaryMessenger, "legado/replace_editor")
+                    .invokeMethod("renderedState", null, object : io.flutter.plugin.common.MethodChannel.Result {
+                        override fun success(result: Any?) {
+                            val value = result as? Map<*, *>
+                            if (value?.get("generation") == generation) read.set(value)
+                            completed.countDown()
+                        }
+                        override fun error(code: String, message: String?, details: Any?) { completed.countDown() }
+                        override fun notImplemented() { completed.countDown() }
+                    })
+            }
+        }
+        if (requested) completed.await(2, java.util.concurrent.TimeUnit.SECONDS)
+        return read.get()
+    }
+
+    private fun awaitSampleInputFrame() {
+        // A newly focused offscreen form field can still own an IME/layout transition.
+        // Stabilize that transition before the single ACTION_SET_TEXT; never repeat the input.
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        val deadline = SystemClock.uptimeMillis() + 30_000
+        fun ready(): android.graphics.Rect? {
+            var nativeReady = false
+            scenario!!.onActivity {
+                nativeReady = model.state.value.focus == ReplaceEditorField.Sample &&
+                    androidx.core.view.ViewCompat.getRootWindowInsets(it.window.decorView)
+                        ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == false
+            }
+            if (!nativeReady) return null
+            val node = driver.node("replace-editor-Sample") ?: return null
+            return try {
+                if (node.isFocused && node.isEditable && node.isEnabled && node.actionList.any {
+                    it.id == AccessibilityNodeInfo.ACTION_SET_TEXT
+                }) android.graphics.Rect().also(node::getBoundsInScreen) else null
+            } finally { node.recycle() }
+        }
+        driver.await("Sample native focus, hidden IME and actual editable frame") {
+            val before = ready() ?: return@await false
+            val frame = java.util.concurrent.CountDownLatch(1)
+            val callback = Runnable { frame.countDown() }
+            scenario!!.onActivity {
+                it.window.decorView.viewTreeObserver.registerFrameCommitCallback(callback)
+                it.window.decorView.postInvalidateOnAnimation()
+            }
+            try {
+                val remaining = deadline - SystemClock.uptimeMillis()
+                remaining > 0 && frame.await(minOf(remaining, 2_000), java.util.concurrent.TimeUnit.MILLISECONDS) &&
+                    before == ready()
+            } finally {
+                scenario!!.onActivity { it.window.decorView.viewTreeObserver.unregisterFrameCommitCallback(callback) }
+            }
+        }
+    }
+
     @Test
     fun savedRulePreservesHiddenMetadataAndReturnsSuccessOnlyAfterRoomReceipt() {
         val rule =
@@ -109,7 +174,7 @@ class ReplaceEditorHostTest {
         driver.setText("replace-editor-Name", " Edited ")
         driver.await("name ACK") { model.state.value.draft[ReplaceEditorField.Name].text == " Edited " }
         reveal("replace-editor-Sample")
-        driver.setText("replace-editor-Sample", "aaa")
+        driver.setText("replace-editor-Sample", "aaa", afterFocus = ::awaitSampleInputFrame)
         driver.await("sample ACK") { model.state.value.draft[ReplaceEditorField.Sample].text == "aaa" }
         driver.await("native literal preview") { model.state.value.preview == "bbb" }
         reveal("replace-editor-output-text")
@@ -165,28 +230,47 @@ class ReplaceEditorHostTest {
     @Test
     fun recreationRestoresRawSelectionAndScrollWithoutOverwritingDraftFromRoom() {
         launch()
+        val draft = "Long name\n".repeat(100)
+        driver.setText("replace-editor-Name", draft)
+        val field = requireNotNull(driver.node("replace-editor-Name"))
+        try {
+            assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, android.os.Bundle().apply {
+                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 27)
+                putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 4)
+            }))
+        } finally { field.recycle() }
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        driver.await("real draft and reverse selection acknowledged before checkpoint") {
+            val actual = renderedState() ?: return@await false
+            val name = (actual["fields"] as? Map<*, *>)?.get("Name") as? Map<*, *> ?: return@await false
+            name["text"] == draft && name["start"] == 27 && name["end"] == 4 && name["focused"] == true &&
+                actual["restoring"] == false && (actual["viewInsetsBottom"] as? Number)?.toDouble() == 0.0 &&
+                model.state.value.draft[ReplaceEditorField.Name] == ReplaceEditorText(draft, 27, 4)
+        }
+        // Seed the original saved viewport contract only after field/IME work has settled.
+        // The next host must restore this exact offset in the actual Flutter viewport.
         scenario!!.onActivity {
-            model.field(
-                ReplaceEditorField.Name,
-                ReplaceEditorText("Long name\n".repeat(100), 27, 4),
-            )
-            model.focus(ReplaceEditorField.Name)
             model.scroll(500)
             runBlocking { model.flushDraft() }
+            assertEquals(500, model.state.value.scroll)
         }
         scenario!!.recreate()
         scenario!!.onActivity { model = it.viewModel }
         driver.await("native replacement loaded") { model.state.value.loaded }
         scenario!!.onActivity { assertTrue(it.supportFragmentManager.fragments.any { fragment -> fragment is FlutterFragment }) }
-        driver.awaitIdentifier("replace-editor-Name")
-        assertEquals(
-            "Long name\n".repeat(100),
-            model.state.value.draft[ReplaceEditorField.Name].text,
-        )
+        driver.awaitIdentifier("replace-editor-fields")
+        driver.await("actual restored Flutter viewport, focus and reverse selection") {
+            val actual = renderedState() ?: return@await false
+            val name = (actual["fields"] as? Map<*, *>)?.get("Name") as? Map<*, *> ?: return@await false
+            actual["restoring"] == false &&
+                kotlin.math.abs(((actual["scrollOffset"] as? Number)?.toDouble() ?: -1.0) - 500.0) < 0.5 &&
+                name["text"] == draft && name["start"] == 27 && name["end"] == 4 && name["focused"] == true &&
+                model.state.value.scroll == 500
+        }
+        assertEquals(draft, model.state.value.draft[ReplaceEditorField.Name].text)
         assertEquals(27, model.state.value.draft[ReplaceEditorField.Name].start)
         assertEquals(4, model.state.value.draft[ReplaceEditorField.Name].end)
         assertEquals("Book", model.state.value.draft[ReplaceEditorField.Scope].text)
-        instrumentation.waitForIdleSync()
         assertEquals(500, model.state.value.scroll)
     }
 

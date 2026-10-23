@@ -96,7 +96,13 @@ class DictionaryRuleEditScreenTest {
     }
     @Test fun backdropRequestsConfirmationAndKeepLeavesDraftIntact() {
         input("Name", renamed)
-        driver.touchDown(8f, driver.bounds("dictionary-rule-backdrop").centerY().toFloat()).close()
+        val backdrop = driver.bounds("dictionary-rule-backdrop")
+        val toolbar = driver.bounds("dictionary-rule-close")
+        val window = android.graphics.Rect()
+        scenario.onActivity { dialog(it).requireDialog().window!!.decorView.getGlobalVisibleRect(window) }
+        assertTrue("Backdrop intersects the owned dialog window", backdrop.intersect(window))
+        assertTrue("Backdrop has a real exposed area above the card", toolbar.top > backdrop.top + 8)
+        driver.touchDown(backdrop.exactCenterX(), (backdrop.top + toolbar.top) / 2f).close()
         driver.click("dictionary-rule-keep")
         assertTrue(state { it.name == renamed && !it.confirmExit })
         assertEquals(original, row()?.name)
@@ -152,7 +158,11 @@ class DictionaryRuleEditScreenTest {
             }
             child != null
         }
-        assertEquals(3, child!!.intent.getIntExtra("cursorPosition", -1))
+        // CodeEditActivity erases launch carriers after its private session accepts them.
+        // The loaded native editor above proves that the requested cursor reached the session.
+        instrumentation.runOnMainSync {
+            assertEquals(3, child!!.findViewById<CodeEditor>(R.id.editText).cursor.left)
+        }
         instrumentation.runOnMainSync { child!!.findViewById<CodeEditor>(R.id.editText).apply { setText("returned rule"); setSelection(0, 4) } }
         driver.click("code-save")
         driver.await("Actual fullscreen result returns to native draft") { state { it.showRule == "returned rule" && it.selections[2] == 4 } }

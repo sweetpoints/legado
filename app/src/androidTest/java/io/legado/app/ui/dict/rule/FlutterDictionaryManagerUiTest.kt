@@ -106,6 +106,46 @@ class FlutterDictionaryManagerUiTest {
         assertEquals(first.urlRule, appDb.dictRuleDao.getByName(first.name)!!.urlRule)
         assertEquals(second.showRule, appDb.dictRuleDao.getByName(second.name)!!.showRule)
     }
+    @Test fun actualManagerOpensFlutterEditorAndRoomChangesReturnToRenderedList() {
+        driver.click("dictionary-more-${first.name}")
+        driver.click("dictionary-action:edit")
+        driver.awaitIdentifier("dictionary-rule-UrlRule")
+        scenario!!.onActivity {
+            assertTrue(it.supportFragmentManager.fragments.any { fragment -> fragment is DictRuleEditDialog })
+        }
+        val updated = "${first.urlRule}-edited-from-manager"
+        driver.setText("dictionary-rule-UrlRule", updated)
+        driver.await("editor native field ACK inside Flutter manager host") {
+            var accepted = false
+            scenario!!.onActivity { activity ->
+                val editor = activity.supportFragmentManager.fragments.filterIsInstance<DictRuleEditDialog>().singleOrNull()
+                accepted = editor?.viewModel?.state?.value?.urlRule == updated
+            }
+            accepted
+        }
+        closeSoftKeyboard()
+        driver.click("dictionary-rule-save")
+        driver.await("editor dismissed and Room change delivered back to manager") {
+            var returned = false
+            scenario!!.onActivity { activity ->
+                returned = activity.supportFragmentManager.fragments.none { it is DictRuleEditDialog } &&
+                    activity.viewModel.state.value.rules.any { it.name == first.name && it.urlRule == updated }
+            }
+            returned
+        }
+        driver.awaitIdentifier("dictionary-select-${first.name}")
+        val saved = requireNotNull(appDb.dictRuleDao.getByName(first.name))
+        assertEquals(updated, saved.urlRule)
+        assertEquals(first.showRule, saved.showRule)
+        assertEquals(first.enabled, saved.enabled)
+        assertEquals(first.sortNumber, saved.sortNumber)
+        scenario!!.recreate()
+        driver.awaitIdentifier("dictionary-select-${first.name}")
+        scenario!!.onActivity { activity ->
+            assertTrue(activity.viewModel.state.value.rules.any { it.name == first.name && it.urlRule == updated })
+        }
+    }
+
     @Test fun physicalSlideAndReorderCancelOnPauseWithoutRoomWrite() {
         val firstBox = driver.bounds("dictionary-select-${first.name}")
         val secondBox = driver.bounds("dictionary-select-${second.name}")
