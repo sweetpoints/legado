@@ -31,6 +31,7 @@ data class DictionaryRuleEditUiState(
     val urlRule: String = "",
     val showRule: String = "",
     val selections: List<Int> = listOf(0, 0, 0),
+    val selectionEnds: List<Int> = selections,
     val focused: DictionaryRuleField? = null,
     val loading: Boolean = true,
     val saving: Boolean = false,
@@ -81,6 +82,12 @@ class DictionaryRuleEditViewModel(
                 selections =
                     DictionaryRuleField.entries.map {
                         saved.get<Int>(PREFIX + "cursor." + it.name) ?: 0
+                    },
+                selectionEnds =
+                    DictionaryRuleField.entries.map {
+                        saved.get<Int>(PREFIX + "end." + it.name)
+                            ?: saved.get<Int>(PREFIX + "cursor." + it.name)
+                            ?: 0
                     },
                 focused = saved.get<String>(PREFIX + "focused")?.let(DictionaryRuleField::valueOf),
                 loading = !restored && originalName != null,
@@ -139,23 +146,29 @@ class DictionaryRuleEditViewModel(
         }
     }
 
-    fun setInput(field: DictionaryRuleField, value: String, cursor: Int) {
+    fun setInput(field: DictionaryRuleField, value: String, cursor: Int, end: Int = cursor) {
         if (state.value.finished || state.value.saving) return
         editRevision++
         saved[PREFIX + field.name] = value
         val position = cursor.coerceIn(0, value.length)
         saved[PREFIX + "cursor." + field.name] = position
+        saved[PREFIX + "end." + field.name] = end.coerceIn(0, value.length)
+        val ends =
+            state.value.selectionEnds.mapIndexed { index, old ->
+                if (index == field.ordinal) end.coerceIn(0, value.length) else old
+            }
         val selections =
             state.value.selections.mapIndexed { index, old ->
                 if (index == field.ordinal) position else old
             }
         mutableState.value =
             when (field) {
-                DictionaryRuleField.Name -> state.value.copy(name = value, selections = selections)
+                DictionaryRuleField.Name ->
+                    state.value.copy(name = value, selections = selections, selectionEnds = ends)
                 DictionaryRuleField.UrlRule ->
-                    state.value.copy(urlRule = value, selections = selections)
+                    state.value.copy(urlRule = value, selections = selections, selectionEnds = ends)
                 DictionaryRuleField.ShowRule ->
-                    state.value.copy(showRule = value, selections = selections)
+                    state.value.copy(showRule = value, selections = selections, selectionEnds = ends)
             }
     }
 
@@ -268,14 +281,14 @@ class DictionaryRuleEditViewModel(
         }
     }
 
-    fun requestClose() {
+    fun requestClose(forceDirty: Boolean = false) {
         if (state.value.saving || state.value.finished) return
         val rule = currentRule()
         val same =
             rule.name == (original?.name ?: "") &&
                 rule.urlRule == (original?.urlRule ?: "") &&
                 rule.showRule == (original?.showRule ?: "")
-        if (same) finish()
+        if (same && !forceDirty) finish()
         else {
             saved[PREFIX + "confirmExit"] = true
             mutableState.value = state.value.copy(confirmExit = true)

@@ -596,5 +596,19 @@
         "type": "int"
       }
     }
-  }
+  },
+  "dictionaryEditorTitle": "字典规则",
+  "dictionaryEditorName": "名称",
+  "dictionaryEditorUrl": "URL 规则",
+  "dictionaryEditorShow": "显示规则",
+  "dictionaryEditorFullscreen": "全屏编辑",
+  "dictionaryEditorSave": "保存",
+  "dictionaryEditorMenu": "菜单",
+  "dictionaryEditorCopy": "复制规则",
+  "dictionaryEditorPaste": "粘贴规则",
+  "dictionaryEditorBridgeError": "字段尚未确认，请重试编辑",
+  "dictionaryEditorExit": "退出",
+  "dictionaryEditorExitMessage": "尚未保存，是否继续编辑？",
+  "dictionaryEditorKeep": "继续编辑",
+  "dictionaryEditorDiscard": "放弃修改"
 }
