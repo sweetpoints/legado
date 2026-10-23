@@ -309,6 +309,18 @@ class RssSourceManagementViewModel(
         if (changed) observe()
     }
 
+    fun filterKey(key: String) {
+        val current = labels ?: return
+        query(when (key) {
+            "enabled" -> current.enabled
+            "disabled" -> current.disabled
+            "login" -> current.login
+            "none" -> current.noGroup
+            "all" -> ""
+            else -> throw IllegalArgumentException("Unknown filter")
+        })
+    }
+
     fun selected(id: String, checked: Boolean) {
         if (!editable() || state.value.rows.none { it.id == id }) return
         val selected = checkpoint.selected.toMutableSet()

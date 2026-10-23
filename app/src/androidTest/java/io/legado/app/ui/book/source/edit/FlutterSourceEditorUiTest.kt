@@ -190,14 +190,115 @@ class FlutterSourceEditorUiTest {
             driver.text("source-field-0-bookSourceName") == "retained draft"
         }
         assertEquals(source.bookSourceName, appDb.bookSourceDao.getBookSource(source.bookSourceUrl)?.bookSourceName)
-        driver.click("source-menu")
-        driver.awaitIdentifier("source-menu-DEBUG")
-        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-        driver.await("Restored editor Back closes only the popup") {
-            val popup = driver.node("source-menu-DEBUG")
-            val popupClosed = popup == null
-            popup?.recycle()
-            popupClosed
+        run {
+            val deadline = SystemClock.uptimeMillis() + 30_000
+            lateinit var root: View
+            scenario!!.onActivity { root = it.window.decorView }
+            val running = mutableSetOf<WindowInsetsAnimationCompat>()
+            var diagnostic = "viewport not sampled"
+            fun awaitPhase(message: String, condition: () -> Boolean) {
+                while (SystemClock.uptimeMillis() < deadline) {
+                    if (condition()) return
+                    SystemClock.sleep(minOf(25L, deadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
+                }
+                fail("$message; $diagnostic")
+            }
+            fun nativeAndViewport(requireHidden: Boolean): Boolean {
+                var ready = false
+                scenario!!.onActivity { activity ->
+                    val state = activity.editorModel.state.value
+                    val doc = state.document
+                    val insets = ViewCompat.getRootWindowInsets(root)
+                    val nativeReady = activity.window.decorView === root && !state.busy &&
+                        !state.confirmDiscard && doc?.selectedTab == 0 && !doc.finished &&
+                        doc.form.field(0, "bookSourceName")?.value == "retained draft"
+                    diagnostic = "attached=${root.isAttachedToWindow},laidOut=${root.isLaidOut}," +
+                        "windowFocus=${root.hasWindowFocus()},imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime())}," +
+                        "imeBottom=${insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom},animations=${running.size}," +
+                        "busy=${state.busy},discard=${state.confirmDiscard},tab=${doc?.selectedTab},nativeDraftMatches=$nativeReady"
+                    ready = nativeReady && root.isAttachedToWindow && root.isLaidOut && root.hasWindowFocus() &&
+                        (!requireHidden || (insets != null && !insets.isVisible(WindowInsetsCompat.Type.ime()) && running.isEmpty()))
+                }
+                return ready
+            }
+            val committed = CountDownLatch(1)
+            val frame = Runnable { committed.countDown() }
+            instrumentation.runOnMainSync {
+                ViewCompat.setWindowInsetsAnimationCallback(root,
+                    object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                        override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                            if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) running.add(animation)
+                        }
+                        override fun onProgress(insets: WindowInsetsCompat,
+                            runningAnimations: MutableList<WindowInsetsAnimationCompat>): WindowInsetsCompat {
+                            running.clear()
+                            running.addAll(runningAnimations.filter { it.typeMask and WindowInsetsCompat.Type.ime() != 0 })
+                            return insets
+                        }
+                        override fun onEnd(animation: WindowInsetsAnimationCompat) { running.remove(animation) }
+                    })
+            }
+            try {
+                awaitPhase("Restored source menu did not accept its single actual click") {
+                    if (!nativeAndViewport(false)) return@awaitPhase false
+                    val initial = driver.node("source-menu") ?: return@awaitPhase false
+                    val pending = ArrayDeque<AccessibilityNodeInfo>()
+                    pending.add(AccessibilityNodeInfo.obtain(initial))
+                    while (pending.isNotEmpty()) {
+                        val node = pending.removeFirst()
+                        if (node.isVisibleToUser && node.isEnabled && node.isClickable &&
+                            node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                            node.recycle(); pending.forEach { it.recycle() }; initial.recycle()
+                            return@awaitPhase true
+                        }
+                        for (i in 0 until node.childCount) node.getChild(i)?.let(pending::add)
+                        node.recycle()
+                    }
+                    var ancestor: AccessibilityNodeInfo? = initial
+                    while (ancestor != null) {
+                        if (ancestor.isEnabled && ancestor.isClickable &&
+                            ancestor.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                            ancestor.recycle(); return@awaitPhase true
+                        }
+                        val parent = ancestor.parent
+                        ancestor.recycle(); ancestor = parent
+                    }
+                    false
+                }
+                awaitPhase("Restored source DEBUG popup did not become rendered") {
+                    val node = driver.node("source-menu-DEBUG")
+                    val shown = node?.isEnabled == true
+                    node?.recycle()
+                    shown
+                }
+                // A restored field can reopen the IME. Menu presence precedes completion
+                // of its hide transition; otherwise this single Back is consumed by IME.
+                closeSoftKeyboard()
+                awaitPhase("Restored popup IME did not become hidden and idle before Back") {
+                    nativeAndViewport(true)
+                }
+                instrumentation.runOnMainSync {
+                    assertTrue("Restored popup needs a hardware frame; $diagnostic", root.isHardwareAccelerated)
+                    root.viewTreeObserver.registerFrameCommitCallback(frame)
+                    root.postInvalidateOnAnimation()
+                }
+                awaitPhase("Restored popup viewport frame did not commit before Back") {
+                    nativeAndViewport(true) && committed.count == 0L
+                }
+                assertTrue("Popup Back budget exhausted before injection; $diagnostic", SystemClock.uptimeMillis() < deadline)
+                instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                awaitPhase("Restored editor Back closes only the popup") {
+                    val popup = driver.node("source-menu-DEBUG")
+                    val popupClosed = popup == null
+                    popup?.recycle()
+                    popupClosed && nativeAndViewport(false)
+                }
+            } finally {
+                instrumentation.runOnMainSync {
+                    root.viewTreeObserver.unregisterFrameCommitCallback(frame)
+                    ViewCompat.setWindowInsetsAnimationCallback(root, null)
+                }
+            }
         }
         assertNull("Popup Back must not request draft discard", driver.node("source-discard-confirm"))
         driver.awaitIdentifier("source-field-0-bookSourceName")

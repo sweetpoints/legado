@@ -45,7 +45,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Exercise real Compose gestures, held Room publications, database order and restored lists. */
+/** Exercise real rendered gestures, held Room publications, database order and restored lists. */
 @RunWith(AndroidJUnit4::class)
 class SourceDragOrderUiTest {
     @get:Rule val compose = createEmptyComposeRule()
@@ -322,6 +322,7 @@ class SourceDragOrderUiTest {
         val visible = fixtures.filterIndexed { index, _ -> index % 2 == 0 }
         val ids = visible.map { rssSourceManagementId(it.sourceUrl) }
         try {
+            flutter.enableAccessibility()
             appDb.rssSourceDao.insert(*fixtures.toTypedArray())
             val before = appDb.rssSourceDao.all.map { it.sourceUrl }
             val raw = appDb.rssSourceDao.all.associate { it.sourceUrl to it.customOrder }
@@ -348,40 +349,47 @@ class SourceDragOrderUiTest {
                 waitRows(ids)
                 screenshot("rss-before")
                 fun drag(returnToStart: Boolean, whileHeld: () -> Unit = {}) {
-                    val list = compose.onNodeWithTag("rss-source-list")
-                    val bounds = list.fetchSemanticsNode().boundsInRoot
-                    val first =
-                        compose
-                            .onNodeWithTag("rss-source-row-${ids[0]}")
-                            .fetchSemanticsNode()
-                            .boundsInRoot
-                    val last =
-                        compose
-                            .onNodeWithTag("rss-source-row-${ids[2]}")
-                            .fetchSemanticsNode()
-                            .boundsInRoot
-                    val start =
-                        Offset(
-                            8 * context.resources.displayMetrics.density,
-                            first.center.y - bounds.top,
-                        )
-                    val end = Offset(start.x, last.center.y + last.height / 4 - bounds.top)
-                    list.performTouchInput {
-                        down(start)
-                        advanceEventTime(ViewConfiguration.getLongPressTimeout().toLong() + 150)
-                        moveTo(end, 500)
-                    }
-                    try {
-                        waitRows(listOf(ids[1], ids[2], ids[0]))
-                        whileHeld()
-                        if (returnToStart) {
-                            list.performTouchInput {
-                                moveTo(Offset(start.x, start.y - first.height / 4), 500)
+                    val first = flutter.bounds("rss-manager-reorder-${ids[0]}")
+                    val last = flutter.bounds("rss-manager-reorder-${ids[2]}")
+                    val startX = first.exactCenterX()
+                    val startY = first.exactCenterY()
+                    flutter.touchDown(startX, startY).use { touch ->
+                        touch.hold(ViewConfiguration.getLongPressTimeout().toLong() + 150)
+                        touch.moveTo(startX, last.exactCenterY() + last.height() / 4f)
+                        waitUntil("Flutter RSS held proxy reaches the target row") {
+                            var dragging = false
+                            scenario.onActivity {
+                                dragging = it.managementModel.state.value.dragging == ids[0]
                             }
-                            waitRows(ids)
+                            val moved = flutter.node("rss-manager-reorder-${ids[0]}")?.let { node ->
+                                val rect = android.graphics.Rect()
+                                node.getBoundsInScreen(rect)
+                                node.recycle()
+                                rect.centerY() > startY + first.height()
+                            } ?: false
+                            dragging && moved
                         }
-                    } finally {
-                        list.performTouchInput { up() }
+                        // Flutter holds the reorder proxy; native order commits only on drop.
+                        whileHeld()
+                        if (returnToStart) touch.moveTo(startX, startY - first.height() / 4f)
+                    }
+                    waitUntil("RSS native drag session finishes") {
+                        var finished = false
+                        scenario.onActivity { finished = it.managementModel.state.value.dragging == null }
+                        finished
+                    }
+                    if (returnToStart) {
+                        waitRows(ids)
+                        waitUntil("Flutter RSS return animation restores both row bounds") {
+                            fun matches(id: String, expected: android.graphics.Rect): Boolean =
+                                flutter.node("rss-manager-reorder-$id")?.let { node ->
+                                    val actual = android.graphics.Rect()
+                                    node.getBoundsInScreen(actual)
+                                    node.recycle()
+                                    actual == expected
+                                } ?: false
+                            matches(ids[0], first) && matches(ids[2], last)
+                        }
                     }
                 }
                 drag(true)
@@ -406,7 +414,11 @@ class SourceDragOrderUiTest {
                         }
                         published
                     }
-                    waitRows(listOf(ids[1], ids[2], ids[0]))
+                    // Room publication is buffered while the real Flutter pointer is held.
+                    scenario.onActivity {
+                        assertEquals(ids[0], it.managementModel.state.value.dragging)
+                        assertEquals(ids, it.managementModel.state.value.rows.map { row -> row.id })
+                    }
                     metadata = databaseMetadata(Kind.RSS)
                     assertEquals(before, appDb.rssSourceDao.all.map { it.sourceUrl })
                 }
@@ -439,6 +451,7 @@ class SourceDragOrderUiTest {
                 screenshot("rss-recreated")
             }
         } finally {
+            flutter.close()
             appDb.rssSourceDao.delete(*fixtures.toTypedArray())
             val orders = old.associate { it.sourceUrl to it.customOrder }
             appDb.rssSourceDao.update(
@@ -609,10 +622,11 @@ class SourceDragOrderUiTest {
         }
 
     private fun filter(kind: Kind, query: String) {
-        if (kind == Kind.BOOK) {
-            flutter.setText("source-manager-query", query)
+        if (kind == Kind.BOOK || kind == Kind.RSS) {
+            val identifier = if (kind == Kind.BOOK) "source-manager-query" else "rss-manager-query"
+            flutter.setText(identifier, query)
             closeSoftKeyboard()
-            flutter.await("Flutter query reflects input") { flutter.text("source-manager-query") == query }
+            flutter.await("Flutter query reflects input") { flutter.text(identifier) == query }
             return
         }
         compose.onNodeWithTag(searchTag(kind)).performTextReplacement(query)
@@ -637,8 +651,11 @@ class SourceDragOrderUiTest {
             }
             loaded
         }
-        if (kind == Kind.BOOK) flutter.awaitIdentifier("source-manager-query")
-        else compose.onNodeWithTag(listTag(kind)).assertExists()
+        when (kind) {
+            Kind.BOOK -> flutter.awaitIdentifier("source-manager-query")
+            Kind.RSS -> flutter.awaitIdentifier("rss-manager-query")
+            Kind.REPLACE -> compose.onNodeWithTag(listTag(kind)).assertExists()
+        }
     }
 
     private fun awaitItems(
@@ -670,8 +687,11 @@ class SourceDragOrderUiTest {
             }
             matches && (expected.size > 3 || renderedOrderMatches(kind, expected))
         }
-        if (kind == Kind.BOOK) flutter.awaitIdentifier("source-manager-query")
-        else compose.onNodeWithTag(listTag(kind)).assertExists()
+        when (kind) {
+            Kind.BOOK -> flutter.awaitIdentifier("source-manager-query")
+            Kind.RSS -> flutter.awaitIdentifier("rss-manager-query")
+            Kind.REPLACE -> compose.onNodeWithTag(listTag(kind)).assertExists()
+        }
     }
 
     private fun renderedOrderMatches(
@@ -679,9 +699,11 @@ class SourceDragOrderUiTest {
         expected: List<String>,
         rssIds: Boolean = false,
     ): Boolean {
-        if (kind == Kind.BOOK) {
+        if (kind == Kind.BOOK || kind == Kind.RSS) {
             val bounds = expected.map { key ->
-                val node = flutter.node("source-manager-row:$key") ?: return false
+                val identifier = if (kind == Kind.BOOK) "source-manager-row:$key"
+                    else "rss-manager-row-${if (rssIds) key else rssSourceManagementId(key)}"
+                val node = flutter.node(identifier) ?: return false
                 android.graphics.Rect().also { node.getBoundsInScreen(it); node.recycle() }
             }
             return bounds.all { it.height() > 0 } &&

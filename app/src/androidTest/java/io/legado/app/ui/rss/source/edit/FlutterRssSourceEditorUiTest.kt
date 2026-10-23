@@ -230,7 +230,15 @@ class FlutterRssSourceEditorUiTest {
             returned
         }
         assertNull(appDb.rssSourceDao.getByKey(source.sourceUrl)?.startJs)
-        driver.awaitIdentifier("rss-field-startJs")
+        // The native ActivityResult ACK precedes the resumed Flutter state stream
+        // and its rendered semantics. An existing identifier can still hold the old text.
+        driver.await("Rendered RSS fullscreen result matches the acknowledged private draft") {
+            driver.node("rss-field-startJs")?.let { field ->
+                val reflected = field.isEnabled && field.isEditable && field.text?.toString() == "returned body"
+                field.recycle()
+                reflected
+            } ?: false
+        }
         assertEquals("returned body", driver.text("rss-field-startJs"))
         assertFalse(File(requireNotNull(launched.getStringExtra("textFile"))).exists())
         driver.click("rss-save"); robot.finished()

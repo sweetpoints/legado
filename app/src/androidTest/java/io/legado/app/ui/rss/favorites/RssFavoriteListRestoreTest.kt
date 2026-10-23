@@ -113,27 +113,119 @@ class RssFavoriteListRestoreTest {
         }
     }
 
-    private fun scrollTo(group: String, id: String) {
-        driver.await("favorites row after real list scrolling") {
-            driver.node(id)?.let {
-                it.recycle()
-                true
+    private fun scrollTo(
+        group: String,
+        id: String,
+        scenario: ActivityScenario<RssFavoritesActivity>,
+    ) {
+        val deadline = SystemClock.uptimeMillis() + 30000
+        fun withinBudget(phase: String, condition: () -> Boolean) {
+            while (SystemClock.uptimeMillis() < deadline) {
+                if (condition()) return
+                val remaining = deadline - SystemClock.uptimeMillis()
+                if (remaining > 0) SystemClock.sleep(minOf(25L, remaining))
             }
-                ?: run {
-                    scroll(driver.node("rss-favorites-list-$group"))
-                    false
-                }
+            throw AssertionError("Favorites scroll navigation timed out: $phase")
         }
+        fun position(): FavoriteScrollPosition? {
+            var result: FavoriteScrollPosition? = null
+            scenario.onActivity { activity ->
+                val home = activity.supportFragmentManager
+                    .findFragmentByTag(RssFavoritesActivity.HOME) as? RssFavoritesFragment
+                home?.let {
+                    val state = it.model.state.value
+                    if (state.loaded && !state.busy && state.group == group &&
+                        state.confirmation == null && it.view?.isAttachedToWindow == true
+                    ) result = it.model.scrollPosition(group)
+                }
+            }
+            return result
+        }
+        fun visibleRows(): List<Pair<String, android.graphics.Rect>> {
+            val rows = mutableListOf<Pair<String, android.graphics.Rect>>()
+            fun visit(node: AccessibilityNodeInfo?) {
+                node ?: return
+                try {
+                    if (node.isVisibleToUser &&
+                        node.viewIdResourceName?.startsWith("rss-favorite-row-") == true
+                    ) rows += node.viewIdResourceName to
+                        android.graphics.Rect().also(node::getBoundsInScreen)
+                    for (index in 0 until node.childCount) visit(node.getChild(index))
+                } finally {
+                    node.recycle()
+                }
+            }
+            visit(driver.node("rss-favorites-list-$group"))
+            return rows
+        }
+        fun frame() {
+            val rendered = CountDownLatch(1)
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                Choreographer.getInstance().postFrameCallback { rendered.countDown() }
+            }
+            withinBudget("native frame") { rendered.count == 0L }
+        }
+        withinBudget("selected group and rendered rows") {
+            position() != null && visibleRows().isNotEmpty()
+        }
+        frame()
+        while (SystemClock.uptimeMillis() < deadline) {
+            if (driver.node(id)?.let { it.recycle(); true } == true) return
+            val before = requireNotNull(position())
+            val beforeRows = visibleRows()
+            // Accessibility success acknowledges dispatch only. Do not submit the next
+            // scroll until this one reaches the native checkpoint and actual semantics.
+            assertTrue(scroll(driver.node("rss-favorites-list-$group")))
+            withinBudget("native scroll progress and rendered rows") {
+                val after = position()
+                after != null &&
+                    (after.index > before.index ||
+                        (after.index == before.index && after.offset > before.offset)) &&
+                    visibleRows().let { it.isNotEmpty() && it != beforeRows }
+            }
+            frame()
+        }
+        throw AssertionError("Favorites row absent after acknowledged scrolling")
     }
 
-    private fun alignRowToTop(group: String, id: String) {
+    private fun alignRowToTop(group: String, id: String, scenario: ActivityScenario<RssFavoritesActivity>) {
         val list = driver.bounds("rss-favorites-list-$group")
         val row = driver.bounds(id)
         val delta = (row.top - list.top).coerceAtLeast(0)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val started = SystemClock.uptimeMillis()
+        val diagnosticStarted = SystemClock.uptimeMillis()
         val x = list.centerX().toFloat()
         val from = (list.bottom - 16).toFloat()
+        fun diagnostic(): String {
+            var native = "nativeOwnerMissing"
+            scenario.onActivity { activity ->
+                val home = activity.supportFragmentManager.findFragmentByTag(RssFavoritesActivity.HOME)
+                    as? RssFavoritesFragment
+                home?.let {
+                    val state = it.model.state.value
+                    val position = it.model.scrollPosition(group)
+                    native = "loaded=${state.loaded},busy=${state.busy},error=${state.error != null}," +
+                        "groupMatches=${state.group == group},index=${position.index},offset=${position.offset}," +
+                        "confirmation=${state.confirmation?.kind?.name}," +
+                        "attached=${it.view?.isAttachedToWindow},windowFocus=${activity.window.decorView.hasWindowFocus()}"
+                }
+            }
+            val node = driver.node(id)
+            val rendered = node?.let {
+                try {
+                    val bounds = android.graphics.Rect().also(it::getBoundsInScreen)
+                    "rowPresent=true,rowBounds=$bounds,enabled=${it.isEnabled}"
+                } finally { it.recycle() }
+            } ?: "rowPresent=false"
+            val confirmation = driver.node("rss-favorites-confirm-message")
+            val confirmationPresent = confirmation != null
+            confirmation?.recycle()
+            return "$native,$rendered,confirmationVisible=$confirmationPresent,elapsedMs=${SystemClock.uptimeMillis() - diagnosticStarted}"
+        }
+        val before = "listBounds=$list,initialRowBounds=$row,delta=$delta,dragDistance=${delta + 8}," +
+            "fromY=$from,toY=${from - delta - 8},${diagnostic()}"
+        android.util.Log.i("FavoritesScrollTest", "before={$before}")
+        val started = SystemClock.uptimeMillis()
         fun event(action: Int, y: Float) {
             val motion = MotionEvent.obtain(started, SystemClock.uptimeMillis(), action, x, y, 0)
             try {
@@ -149,14 +241,19 @@ class RssFavoriteListRestoreTest {
         }
         SystemClock.sleep(150) // End the real drag at rest instead of introducing fling velocity.
         event(MotionEvent.ACTION_UP, from - delta - 8)
-        driver.await("favorites scroll checkpoint") {
-            // The checkpoint follows the actual rendered scroll, not a test-only bridge command.
-            driver.node(id)?.let { node ->
-                node.recycle()
-                true
-            } ?: false
+        try {
+            driver.await("favorites scroll checkpoint") {
+                // The checkpoint follows the actual rendered scroll, not a test-only bridge command.
+                driver.node(id)?.let { node ->
+                    node.recycle()
+                    true
+                } ?: false
+            }
+        } catch (failure: AssertionError) {
+            throw AssertionError("${failure.message}; before={$before}; after={${diagnostic()}}", failure)
         }
         instrumentation.waitForIdleSync()
+        android.util.Log.i("FavoritesScrollTest", "after={${diagnostic()}}")
     }
 
     @Test
@@ -243,8 +340,8 @@ class RssFavoriteListRestoreTest {
             await(scenario)
             group(a)
             val target = RoomRssFavoriteListRepository.key(rows[20].origin, rows[20].link)
-            scrollTo(a, "rss-favorite-row-$target")
-            alignRowToTop(a, "rss-favorite-row-$target")
+            scrollTo(a, "rss-favorite-row-$target", scenario)
+            alignRowToTop(a, "rss-favorite-row-$target", scenario)
             group(b)
             group(a)
             scenario.recreate()

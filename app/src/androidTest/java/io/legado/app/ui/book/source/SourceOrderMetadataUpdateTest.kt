@@ -13,6 +13,7 @@ import io.legado.app.data.repository.rssSourceManagementId
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.utils.GSON
+import io.legado.app.ui.flutter.FlutterUiTestDriver
 import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -41,7 +42,9 @@ class SourceOrderMetadataUpdateTest {
                 )
             }
         val keys = stale.map { it.sourceUrl }.toSet()
+        val flutter = FlutterUiTestDriver(instrumentation)
         try {
+            flutter.enableAccessibility()
             appDb.rssSourceDao.insert(*stale.toTypedArray())
             ActivityScenario.launch(RssSourceActivity::class.java).use { scenario ->
                 val expectedOrder =
@@ -99,24 +102,167 @@ class SourceOrderMetadataUpdateTest {
                         },
                     )
                 }
-                // Immutable IDs captured before the concurrent edit target only the enabled column.
-                compose.onNodeWithTag("rss-source-enabled-${ids[0]}").performClick()
-                waitUntil("RSS switch enabled") {
-                    appDb.rssSourceDao.getByKey(stale[0].sourceUrl)?.enabled == true
+                fun readyForMutation(): Boolean {
+                    var ready = false
+                    scenario.onActivity {
+                        val state = it.managementModel.state.value
+                        ready = state.loaded && !state.busy && state.pending == null
+                    }
+                    return ready
                 }
+                fun switchDiagnostic(phase: String) {
+                    val room = appDb.rssSourceDao.getByKey(stale[0].sourceUrl)
+                    var native = ""
+                    scenario.onActivity { activity ->
+                        val state = activity.managementModel.state.value
+                        val row = state.rows.firstOrNull { it.id == ids[0] }
+                        native = "loaded=${state.loaded} busy=${state.busy} dialog=${state.dialog?.name} " +
+                            "pending=${state.pending != null} effect=${state.pending?.action?.name} " +
+                            "waitingNative=${state.waitingNative} error=${state.error != null} " +
+                            "dragging=${state.dragging != null} rowCount=${state.rows.size} " +
+                            "rowIndex=${state.rows.indexOfFirst { it.id == ids[0] }} " +
+                            "rowPresent=${row != null} rowEnabled=${row?.enabled} " +
+                            "queryMatches=${state.query == "group:$group"} queryLength=${state.query.length} " +
+                            "windowFocus=${activity.window.decorView.hasWindowFocus()} " +
+                            "lifecycle=${activity.lifecycle.currentState}"
+                    }
+                    val queue = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+                    flutter.node("rss-manager-enabled-${ids[0]}")?.let(queue::add)
+                    val rendered = mutableListOf<String>()
+                    while (queue.isNotEmpty()) {
+                        val node = queue.removeFirst()
+                        try {
+                            val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+                            rendered.add("checked=${node.isChecked} checkable=${node.isCheckable} " +
+                                "enabled=${node.isEnabled} clickable=${node.isClickable} " +
+                                "visible=${node.isVisibleToUser} bounds=$bounds actions=${node.actionList.map { it.id }}")
+                            for (index in 0 until node.childCount) node.getChild(index)?.let(queue::add)
+                        } finally { node.recycle() }
+                    }
+                    // Scalars only: never print row names, IDs, URLs, comments, or query contents.
+                    android.util.Log.i("RssOrderSwitch", "phase=$phase roomPresent=${room != null} " +
+                        "roomEnabled=${room?.enabled} roomOrder=${room?.customOrder} $native nodes=$rendered")
+                }
+                fun clickSettledSwitch() {
+                    // Replace the driver's one 30s click budget; do not add another deadline.
+                    val deadline = android.os.SystemClock.uptimeMillis() + 30_000
+                    val hostBounds = android.graphics.Rect()
+                    fun nativeReady(): Boolean {
+                        var ready = false
+                        scenario.onActivity { activity ->
+                            val state = activity.managementModel.state.value
+                            val host = activity.window.decorView
+                            val visibleHost = host.getGlobalVisibleRect(hostBounds)
+                            ready = visibleHost && host.isAttachedToWindow && host.isHardwareAccelerated &&
+                                host.hasWindowFocus() && state.loaded && !state.busy && state.pending == null &&
+                                !state.waitingNative && state.dialog == null && state.dragging == null &&
+                                state.query == "group:$group" &&
+                                state.rows.map { it.id } == listOf(ids[1], ids[2], ids[0]) &&
+                                state.rows.last().enabled == false
+                        }
+                        return ready
+                    }
+                    fun target(): android.view.accessibility.AccessibilityNodeInfo? {
+                        val queue = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+                        flutter.node("rss-manager-enabled-${ids[0]}")?.let(queue::add) ?: return null
+                        while (queue.isNotEmpty()) {
+                            val node = queue.removeFirst()
+                            if (node.isCheckable) {
+                                queue.forEach { it.recycle() }
+                                return node
+                            }
+                            for (index in 0 until node.childCount) node.getChild(index)?.let(queue::add)
+                            node.recycle()
+                        }
+                        return null
+                    }
+                    fun bounds(node: android.view.accessibility.AccessibilityNodeInfo?): android.graphics.Rect? {
+                        if (node == null || !node.isVisibleToUser || !node.isEnabled ||
+                            !node.isClickable || node.isChecked ||
+                            node.actionList.none { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK }) return null
+                        return android.graphics.Rect().also(node::getBoundsInScreen)
+                            .takeIf { !it.isEmpty && hostBounds.contains(it) }
+                    }
+                    while (android.os.SystemClock.uptimeMillis() < deadline) {
+                        if (!nativeReady()) {
+                            val left = deadline - android.os.SystemClock.uptimeMillis()
+                            if (left > 0) android.os.SystemClock.sleep(minOf(50L, left))
+                            continue
+                        }
+                        val first = target()
+                        val beforeFrame = try { bounds(first) } finally { first?.recycle() }
+                        if (beforeFrame == null) {
+                            val left = deadline - android.os.SystemClock.uptimeMillis()
+                            if (left > 0) android.os.SystemClock.sleep(minOf(50L, left))
+                            continue
+                        }
+                        val frame = java.util.concurrent.CountDownLatch(1)
+                        val committed = Runnable { frame.countDown() }
+                        var observer: android.view.ViewTreeObserver? = null
+                        scenario.onActivity { activity ->
+                            val host = activity.window.decorView
+                            observer = host.viewTreeObserver
+                            observer!!.registerFrameCommitCallback(committed)
+                            host.postInvalidateOnAnimation()
+                        }
+                        // This is a host frame, not proof of a Dart frame; fresh semantics below
+                        // independently confirms Flutter's actual value and target geometry.
+                        val remaining = deadline - android.os.SystemClock.uptimeMillis()
+                        val drawn = try {
+                            remaining > 0 && frame.await(remaining, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        } finally {
+                            scenario.onActivity {
+                                observer?.takeIf { it.isAlive }?.unregisterFrameCommitCallback(committed)
+                            }
+                        }
+                        if (!drawn) break
+                        if (!nativeReady()) continue
+                        val fresh = target()
+                        try {
+                            if (bounds(fresh) != beforeFrame) continue
+                            check(android.os.SystemClock.uptimeMillis() < deadline) { "RSS switch click deadline" }
+                            check(requireNotNull(fresh).performAction(
+                                android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK
+                            )) { "RSS switch rejected its single click" }
+                            return // Never dispatch again after this one actual ACTION_CLICK.
+                        } finally { fresh?.recycle() }
+                    }
+                    switchDiagnostic("switchPreconditionDeadline")
+                    error("RSS switch input precondition deadline")
+                }
+                // Immutable IDs captured before the concurrent edit target only the enabled column.
+                waitUntil("RSS switch row settled") { readyForMutation() }
+                switchDiagnostic("beforeOriginalClick")
+                try { clickSettledSwitch() } catch (failure: Throwable) {
+                    switchDiagnostic("switchInputFailed")
+                    throw failure
+                }
+                switchDiagnostic("originalClickAccepted")
+                try {
+                    waitUntil("RSS switch enabled") {
+                        appDb.rssSourceDao.getByKey(stale[0].sourceUrl)?.enabled == true &&
+                            readyForMutation()
+                    }
+                } catch (failure: Throwable) {
+                    switchDiagnostic("originalNativeAckFailed")
+                    throw failure
+                }
+                switchDiagnostic("originalNativeAckPassed")
                 assertState(setOf(stale[0].sourceUrl))
+                // Room commits before the model clears busy; synchronize each actual command ACK.
                 scenario.onActivity { it.managementModel.enabled(ids, true) }
                 waitUntil("RSS selection enabled") {
-                    keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == true }
+                    keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == true } && readyForMutation()
                 }
                 assertState(keys)
                 scenario.onActivity { it.managementModel.enabled(ids, false) }
                 waitUntil("RSS selection disabled") {
-                    keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == false }
+                    keys.all { appDb.rssSourceDao.getByKey(it)?.enabled == false } && readyForMutation()
                 }
                 assertState(emptySet())
             }
         } finally {
+            flutter.close()
             appDb.rssSourceDao.delete(*stale.toTypedArray())
             val orders = before.associate { it.sourceUrl to it.customOrder }
             appDb.rssSourceDao.update(
