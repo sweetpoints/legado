@@ -271,8 +271,6 @@
       "app/src/main/java/io/legado/app/ui/qrcode/QrScanScreen.kt",
       "app/src/main/java/io/legado/app/ui/replace/ReplaceManagementRoute.kt",
       "app/src/main/java/io/legado/app/ui/replace/ReplaceManagementScreen.kt",
-      "app/src/main/java/io/legado/app/ui/replace/edit/ReplaceEditorRoute.kt",
-      "app/src/main/java/io/legado/app/ui/replace/edit/ReplaceEditorScreen.kt",
       "app/src/main/java/io/legado/app/ui/rss/article/RssArticlesPageRoute.kt",
       "app/src/main/java/io/legado/app/ui/rss/article/RssArticlesPageScreen.kt",
       "app/src/main/java/io/legado/app/ui/rss/article/RssCategoryRoute.kt",
