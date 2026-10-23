@@ -146,6 +146,20 @@
   "codeEditorKeepEditing": "继续编辑",
   "codeEditorPlatformUnavailable": "此嵌入式编辑区域仅支持 Android。",
   "codeEditorSearchRejected": "搜索修改未被接受，已恢复。请重试或重新编辑搜索后再保存或替换。",
+  "dictionaryEditorTitle": "字典规则",
+  "dictionaryEditorName": "名称",
+  "dictionaryEditorUrl": "URL 规则",
+  "dictionaryEditorShow": "显示规则",
+  "dictionaryEditorFullscreen": "全屏编辑",
+  "dictionaryEditorSave": "保存",
+  "dictionaryEditorMenu": "菜单",
+  "dictionaryEditorCopy": "复制规则",
+  "dictionaryEditorPaste": "粘贴规则",
+  "dictionaryEditorBridgeError": "字段尚未确认，请重试编辑",
+  "dictionaryEditorExit": "退出",
+  "dictionaryEditorExitMessage": "尚未保存，是否继续编辑？",
+  "dictionaryEditorKeep": "继续编辑",
+  "dictionaryEditorDiscard": "放弃修改",
   "pdfTitle": "PDF 阅读",
   "pdfImportTitle": "导入 PDF",
   "pdfImportDescription": "导入不超过 32 MiB 的本地 PDF，文档将保存在书库中供离线阅读。",
@@ -596,19 +610,5 @@
         "type": "int"
       }
     }
-  },
-  "dictionaryEditorTitle": "字典规则",
-  "dictionaryEditorName": "名称",
-  "dictionaryEditorUrl": "URL 规则",
-  "dictionaryEditorShow": "显示规则",
-  "dictionaryEditorFullscreen": "全屏编辑",
-  "dictionaryEditorSave": "保存",
-  "dictionaryEditorMenu": "菜单",
-  "dictionaryEditorCopy": "复制规则",
-  "dictionaryEditorPaste": "粘贴规则",
-  "dictionaryEditorBridgeError": "字段尚未确认，请重试编辑",
-  "dictionaryEditorExit": "退出",
-  "dictionaryEditorExitMessage": "尚未保存，是否继续编辑？",
-  "dictionaryEditorKeep": "继续编辑",
-  "dictionaryEditorDiscard": "放弃修改"
+  }
 }

@@ -146,6 +146,20 @@
   "codeEditorKeepEditing": "Keep editing",
   "codeEditorPlatformUnavailable": "This embedded editing surface is available on Android.",
   "codeEditorSearchRejected": "The search update was rejected and restored. Retry or edit the search again before saving or replacing.",
+  "dictionaryEditorTitle": "Dictionary rule",
+  "dictionaryEditorName": "Name",
+  "dictionaryEditorUrl": "URL rule",
+  "dictionaryEditorShow": "Display rule",
+  "dictionaryEditorFullscreen": "Fullscreen editor",
+  "dictionaryEditorSave": "Save",
+  "dictionaryEditorMenu": "Menu",
+  "dictionaryEditorCopy": "Copy rule",
+  "dictionaryEditorPaste": "Paste rule",
+  "dictionaryEditorBridgeError": "Field not acknowledged. Edit it again to retry.",
+  "dictionaryEditorExit": "Exit",
+  "dictionaryEditorExitMessage": "Keep editing the unsaved rule?",
+  "dictionaryEditorKeep": "Keep editing",
+  "dictionaryEditorDiscard": "Discard changes",
   "pdfTitle": "PDF reader",
   "pdfImportTitle": "Import PDF",
   "pdfImportDescription": "Import a local PDF up to 32 MiB. Your document is stored in the library for offline reading.",
@@ -596,19 +610,5 @@
         "type": "int"
       }
     }
-  },
-  "dictionaryEditorTitle": "Dictionary rule",
-  "dictionaryEditorName": "Name",
-  "dictionaryEditorUrl": "URL rule",
-  "dictionaryEditorShow": "Display rule",
-  "dictionaryEditorFullscreen": "Fullscreen editor",
-  "dictionaryEditorSave": "Save",
-  "dictionaryEditorMenu": "Menu",
-  "dictionaryEditorCopy": "Copy rule",
-  "dictionaryEditorPaste": "Paste rule",
-  "dictionaryEditorBridgeError": "Field not acknowledged. Edit it again to retry.",
-  "dictionaryEditorExit": "Exit",
-  "dictionaryEditorExitMessage": "Keep editing the unsaved rule?",
-  "dictionaryEditorKeep": "Keep editing",
-  "dictionaryEditorDiscard": "Discard changes"
+  }
 }

@@ -73,9 +73,39 @@ class ReplaceEditorHostTest {
         driver.awaitIdentifier("replace-editor-Name")
     }
 
-    private fun reveal(id: String) {
+    private fun reveal(id: String, forInput: Boolean = false) {
+        if (forInput) androidx.test.espresso.Espresso.closeSoftKeyboard()
+        var previousGeometry: Pair<Double, Double>? = null
         driver.await("rendered field $id") {
-            driver.node(id)?.let { it.recycle(); return@await true }
+            if (forInput) {
+                val actual = renderedState() ?: return@await false
+                val geometry = (actual["viewportDimension"] as? Number)?.toDouble() to
+                    (actual["scrollOffset"] as? Number)?.toDouble()
+                val stable = geometry.first != null && geometry.second != null &&
+                    previousGeometry == (geometry.first!! to geometry.second!!)
+                if (geometry.first != null && geometry.second != null) previousGeometry = geometry.first!! to geometry.second!!
+                if ((actual["viewInsetsBottom"] as? Number)?.toDouble() != 0.0 || actual["restoring"] != false || !stable) return@await false
+            }
+            driver.node(id)?.let { target ->
+                var ready = !forInput
+                if (forInput) {
+                    val pending = ArrayDeque<AccessibilityNodeInfo>()
+                    pending.add(AccessibilityNodeInfo.obtain(target))
+                    val viewport = driver.node("replace-editor-fields")
+                    val area = viewport?.let { android.graphics.Rect().also(it::getBoundsInScreen) }
+                    viewport?.recycle()
+                    while (pending.isNotEmpty()) {
+                        val node = pending.removeFirst()
+                        val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+                        if (node.isVisibleToUser && node.isEnabled && node.isClickable && area?.contains(bounds) == true &&
+                            node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }) ready = true
+                        for (i in 0 until node.childCount) node.getChild(i)?.let(pending::add)
+                        node.recycle()
+                    }
+                }
+                target.recycle()
+                if (ready) return@await true
+            }
             val queue = ArrayDeque<AccessibilityNodeInfo>()
             instrumentation.uiAutomation.rootInActiveWindow?.let(queue::add)
             var scrolled = false
@@ -183,7 +213,7 @@ class ReplaceEditorHostTest {
         launch(rule)
         driver.setText("replace-editor-Name", " Edited ")
         driver.await("name ACK") { model.state.value.draft[ReplaceEditorField.Name].text == " Edited " }
-        reveal("replace-editor-Sample")
+        reveal("replace-editor-Sample", forInput = true)
         driver.setText("replace-editor-Sample", "aaa", afterFocus = ::awaitSampleInputFrame)
         driver.await("sample ACK") { model.state.value.draft[ReplaceEditorField.Sample].text == "aaa" }
         driver.await("native literal preview") { model.state.value.preview == "bbb" }
