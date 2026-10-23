@@ -170,6 +170,24 @@ class ReplaceEditorViewModelTest {
     }
 
     @Test
+    fun rejectedFlutterInputRequiresExplicitDiscardEvenWhenNativeDraftIsClean() = test {
+        val repo = Fake()
+        val model = model(repo)
+        runCurrent()
+        model.close(forceDirty = true)
+        assertTrue(model.state.value.exit)
+        assertFalse(model.state.value.finished)
+        model.keepEditing()
+        assertFalse(model.state.value.exit)
+        assertFalse(model.state.value.finished)
+        model.close(forceDirty = true)
+        model.discard()
+        assertTrue(model.state.value.finished)
+        assertFalse(model.state.value.saved)
+        assertEquals(0, repo.saves)
+    }
+
+    @Test
     fun selectionMovementIsCleanButAllFlagsAndSampleAreDirtyAndYesKeepsEditing() = test {
         val repo = Fake()
         val clean = model(repo)

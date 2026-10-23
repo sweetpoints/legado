@@ -9,6 +9,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../app/theme.dart';
 import '../features/sources/source_management_page.dart';
 import '../l10n/generated/app_localizations.dart';
+import 'replace_editor/replace_editor_page.dart';
 import 'source_management_backend.dart';
 import 'source_manager/source_manager_page.dart';
 import 'source_editor/source_editor_page.dart';
@@ -41,6 +42,7 @@ Future<EmbeddedSourceConfiguration> embeddedSourceConfiguration(Ref ref) async {
       .invokeMapMethod<String, Object?>('bootstrap');
   if (result == null ||
       ![
+        '/replace-editor',
         '/sources',
         '/source-manager',
         '/source-editor',
@@ -89,6 +91,10 @@ GoRouter embeddedSourceRouter(Ref ref) {
       GoRoute(
         path: '/dictionary-manager',
         builder: (_, _) => const DictionaryManagerPage(),
+      ),
+      GoRoute(
+        path: '/replace-editor',
+        builder: (_, _) => const ReplaceEditorPage(),
       ),
       GoRoute(path: '/rss-manager', builder: (_, _) => const RssManagerPage()),
       GoRoute(

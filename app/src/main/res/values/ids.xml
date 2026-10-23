@@ -31,4 +31,5 @@
     <item name="video_player_compose" type="id" />
     <item name="floating_player_compose" type="id" />
     <item name="floatingPlayerView" type="id" />
+    <item name="replace_editor_flutter_container" type="id" />
 </resources>

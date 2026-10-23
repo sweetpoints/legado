@@ -6,14 +6,15 @@ import android.os.Bundle
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.runtime.Composable
+import android.widget.FrameLayout
+import io.legado.app.R
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.CreationExtras
 import io.legado.app.ui.association.compose.associationCreationExtras
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
-import io.legado.app.base.BaseComposeActivity
+import io.legado.app.base.BaseThemedActivity
 import io.legado.app.data.repository.*
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.widget.keyboard.KeyboardAssistsConfig
@@ -22,10 +23,9 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.toastOnUi
-import kotlinx.coroutines.launch
 import io.legado.app.utils.launchCleanup
 
-class ReplaceEditActivity : BaseComposeActivity() {
+class ReplaceEditActivity : BaseThemedActivity() {
     val viewModel by
         viewModels<ReplaceEditorViewModel> {
             // Intent may carry the reader's selected text. Do not copy it into SavedState defaults.
@@ -65,37 +65,49 @@ class ReplaceEditActivity : BaseComposeActivity() {
             )
         }
 
-    override fun onComposeCreated(savedInstanceState: Bundle?) {
-        onBackPressedDispatcher.addCallback(this) { finish() }
+    internal val editorCoordinator by lazy {
+        ReplaceEditorNativeCoordinator(this, viewModel, assist, lifecycle, lifecycleScope,
+            { !supportFragmentManager.isStateSaved && !isFinishing && !isDestroyed },
+            { launch, cursor ->
+                editor.launch(Intent(this, CodeEditActivity::class.java).apply {
+                    putExtra("useTextFile", true)
+                    putExtra("textFile", launch.path)
+                    putExtra("title", getString(launch.field.label()))
+                    putExtra("cursorPosition", cursor)
+                })
+            }, { saved -> if (saved) setResult(RESULT_OK); super.finish() },
+            { sendToClip(it) }, { getClipText() },
+            { showHelp("regexHelp") }, { showDialogFragment<KeyboardAssistsConfig>() },
+            { toastOnUi(it) })
     }
 
-    @Composable
-    override fun Content(savedInstanceState: Bundle?) {
-        ReplaceEditorRoute(
-            viewModel,
-            assist,
-            { !supportFragmentManager.isStateSaved && !isFinishing },
-            { launch, cursor ->
-                editor.launch(
-                    Intent(this, CodeEditActivity::class.java).apply {
-                        putExtra("useTextFile", true)
-                        putExtra("textFile", launch.path)
-                        putExtra("title", getString(launch.field.label()))
-                        putExtra("cursorPosition", cursor)
-                    }
-                )
-            },
-            { saved ->
-                if (saved) setResult(RESULT_OK)
-                super.finish()
-            },
-            { sendToClip(it) },
-            { getClipText() },
-            { showHelp("regexHelp") },
-            { showDialogFragment<KeyboardAssistsConfig>() },
-            { toastOnUi(it) },
-        )
+    override fun onCreate(savedInstanceState: Bundle?) {
+        onBackPressedDispatcher.addCallback(this) { editorCoordinator.requestBack() }
+        super.onCreate(savedInstanceState)
     }
+    override fun createContentView() {
+        setContentView(FrameLayout(this).apply { id = R.id.replace_editor_flutter_container })
+    }
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
+        editorCoordinator
+        if (editorFragment == null) supportFragmentManager.beginTransaction()
+            .add(R.id.replace_editor_flutter_container, ReplaceEditorFlutterFragment(), FRAGMENT_TAG)
+            .commitNow()
+    }
+    private val editorFragment get() = supportFragmentManager.findFragmentByTag(FRAGMENT_TAG) as? ReplaceEditorFlutterFragment
+    override fun onPostResume() { super.onPostResume(); editorFragment?.onPostResume(); editorCoordinator.onHostReady() }
+    override fun onNewIntent(intent: Intent) { editorFragment?.onNewIntent(intent); super.onNewIntent(intent) }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        editorFragment?.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        editorFragment?.onActivityResult(requestCode, resultCode, data)
+    }
+    override fun onUserLeaveHint() { super.onUserLeaveHint(); editorFragment?.onUserLeaveHint() }
+    override fun onTrimMemory(level: Int) { super.onTrimMemory(level); editorFragment?.onTrimMemory(level) }
+    override fun onDestroy() { editorCoordinator.close(); super.onDestroy() }
 
     override fun onStop() {
         lifecycleScope.launchCleanup { runCatching { viewModel.flushDraft() } }
@@ -103,10 +115,11 @@ class ReplaceEditActivity : BaseComposeActivity() {
     }
 
     override fun finish() {
-        viewModel.close()
+        editorCoordinator.requestBack()
     }
 
     companion object {
+        private const val FRAGMENT_TAG = "replace-editor-flutter"
         fun startIntent(
             context: Context,
             id: Long = -1,
