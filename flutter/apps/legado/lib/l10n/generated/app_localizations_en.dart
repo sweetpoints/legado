@@ -424,6 +424,49 @@ class AppLocalizationsEn extends AppLocalizations {
       'The search update was rejected and restored. Retry or edit the search again before saving or replacing.';
 
   @override
+  String get dictionaryEditorTitle => 'Dictionary rule';
+
+  @override
+  String get dictionaryEditorName => 'Name';
+
+  @override
+  String get dictionaryEditorUrl => 'URL rule';
+
+  @override
+  String get dictionaryEditorShow => 'Display rule';
+
+  @override
+  String get dictionaryEditorFullscreen => 'Fullscreen editor';
+
+  @override
+  String get dictionaryEditorSave => 'Save';
+
+  @override
+  String get dictionaryEditorMenu => 'Menu';
+
+  @override
+  String get dictionaryEditorCopy => 'Copy rule';
+
+  @override
+  String get dictionaryEditorPaste => 'Paste rule';
+
+  @override
+  String get dictionaryEditorBridgeError =>
+      'Field not acknowledged. Edit it again to retry.';
+
+  @override
+  String get dictionaryEditorExit => 'Exit';
+
+  @override
+  String get dictionaryEditorExitMessage => 'Keep editing the unsaved rule?';
+
+  @override
+  String get dictionaryEditorKeep => 'Keep editing';
+
+  @override
+  String get dictionaryEditorDiscard => 'Discard changes';
+
+  @override
   String get pdfTitle => 'PDF reader';
 
   @override
@@ -1556,47 +1599,4 @@ class AppLocalizationsEn extends AppLocalizations {
   String sourcesPage(int page) {
     return 'Page $page';
   }
-
-  @override
-  String get dictionaryEditorTitle => 'Dictionary rule';
-
-  @override
-  String get dictionaryEditorName => 'Name';
-
-  @override
-  String get dictionaryEditorUrl => 'URL rule';
-
-  @override
-  String get dictionaryEditorShow => 'Display rule';
-
-  @override
-  String get dictionaryEditorFullscreen => 'Fullscreen editor';
-
-  @override
-  String get dictionaryEditorSave => 'Save';
-
-  @override
-  String get dictionaryEditorMenu => 'Menu';
-
-  @override
-  String get dictionaryEditorCopy => 'Copy rule';
-
-  @override
-  String get dictionaryEditorPaste => 'Paste rule';
-
-  @override
-  String get dictionaryEditorBridgeError =>
-      'Field not acknowledged. Edit it again to retry.';
-
-  @override
-  String get dictionaryEditorExit => 'Exit';
-
-  @override
-  String get dictionaryEditorExitMessage => 'Keep editing the unsaved rule?';
-
-  @override
-  String get dictionaryEditorKeep => 'Keep editing';
-
-  @override
-  String get dictionaryEditorDiscard => 'Discard changes';
 }

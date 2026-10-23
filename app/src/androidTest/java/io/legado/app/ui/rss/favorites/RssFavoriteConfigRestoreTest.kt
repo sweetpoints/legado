@@ -124,13 +124,38 @@ class RssFavoriteConfigRestoreTest {
             scenario.recreate()
             await(scenario)
             restoreProbe("after-native-loaded")
+            var imeHiddenRequested = false
+            var previousBounds: Pair<android.graphics.Rect, android.graphics.Rect>? = null
             try {
                 driver.await("Actual Flutter draft and group focus restored") {
+                    if (!renderedSelection()) return@await false
+                    // Restoration may focus group and reveal its caret under the IME,
+                    // clipping title out of Flutter semantics. Hide IME without unfocusing.
+                    if (!imeHiddenRequested) {
+                        androidx.test.espresso.Espresso.closeSoftKeyboard()
+                        imeHiddenRequested = true
+                        return@await false
+                    }
+                    var imeHidden = false
+                    scenario.onActivity { activity ->
+                        val dialog = activity.supportFragmentManager.findFragmentByTag("favorite-test") as RssFavoritesDialog
+                        val decor = dialog.dialog?.window?.decorView ?: activity.window.decorView
+                        imeHidden = androidx.core.view.ViewCompat.getRootWindowInsets(decor)
+                            ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == false
+                    }
+                    if (!imeHidden) return@await false
+                    val title = driver.node("favorite-config-title") ?: return@await false
                     val group = driver.node("favorite-config-group")
-                    val focused = group?.isFocused == true
-                    group?.recycle()
-                    driver.text("favorite-config-title") == "Draft title" &&
-                        driver.text("favorite-config-group") == "Draft group" && focused
+                    try {
+                        if (group == null) return@await false
+                        val bounds = android.graphics.Rect().also(title::getBoundsInScreen) to
+                            android.graphics.Rect().also(group::getBoundsInScreen)
+                        val stable = previousBounds == bounds
+                        previousBounds = bounds
+                        stable && title.text?.toString() == "Draft title" &&
+                            group.text?.toString() == "Draft group" && group.isFocused &&
+                            group.textSelectionStart == 2 && group.textSelectionEnd == 5
+                    } finally { title.recycle(); group?.recycle() }
                 }
             } catch (failure: AssertionError) {
                 restoreProbe("restore-failed")

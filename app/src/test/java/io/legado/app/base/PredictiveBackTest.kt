@@ -68,6 +68,14 @@ class PredictiveBackTest {
                     assertTrue(source.contains("override fun finish() = viewModel.requestExit()"))
                     assertTrue(source.contains("private fun finishPlatform("))
                     assertTrue(source.contains("super.finish()"))
+                } else if (path.endsWith("ReplaceEditActivity.kt")) {
+                    // Flutter now delegates both system back and finish to the native dirty guard.
+                    assertTrue(source.contains("onBackPressedDispatcher.addCallback(this) { editorCoordinator.requestBack() }"))
+                    val finish = source.substringAfter("override fun finish()").substringBefore("companion object")
+                    assertTrue(finish.contains("editorCoordinator.requestBack()"))
+                    val coordinator = File("src/main/java/io/legado/app/ui/replace/edit/ReplaceEditorNativeCoordinator.kt").readText()
+                    assertTrue(coordinator.contains("fun requestBack() { if (!closed) model.close(forceDirty = rejected.isNotEmpty()) }"))
+                    assertTrue(source.contains("{ saved -> if (saved) setResult(RESULT_OK); super.finish() }"))
                 } else assertTrue(guardedFinishCallback.containsMatchIn(source))
                 assertTrue(source.contains("override fun finish()"))
             }

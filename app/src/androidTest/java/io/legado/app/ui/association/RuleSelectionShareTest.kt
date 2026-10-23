@@ -1,5 +1,10 @@
 package io.legado.app.ui.association
 
+import android.os.SystemClock
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.test.core.app.ActivityScenario
+import io.legado.app.ui.flutter.FlutterUiTestDriver
+
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
@@ -273,7 +278,6 @@ class RuleSelectionShareTest {
     }
 
     @Test
-    @OptIn(ExperimentalTestApi::class)
     fun dictionarySelectionSharesTheCompleteUrlAndDisplayRule() {
         val id = UUID.randomUUID().toString()
         val rule =
@@ -301,35 +305,89 @@ class RuleSelectionShareTest {
             var sharedUri: Uri? = null
             var json = ""
             try {
-                runAndroidComposeUiTest<DictRuleActivity> {
-                    waitUntil(timeoutMillis = 15000) {
-                        val rows = activity?.viewModel?.state?.value?.rules.orEmpty()
-                        rows.any { it.name == rule.name } && rows.any { it.name == other.name }
+                val driver = FlutterUiTestDriver(instrumentation)
+                fun await15(description: String, condition: () -> Boolean) {
+                    val deadline = SystemClock.uptimeMillis() + 15_000
+                    while (SystemClock.uptimeMillis() < deadline) {
+                        if (condition()) return
+                        SystemClock.sleep(50)
                     }
-                    onNodeWithTag("dictionary-selection-menu").assertIsNotEnabled()
-                    assertNull("Empty selection must not launch a share", chooser.get())
-                    onNodeWithTag("dictionary-list")
-                        .performScrollToNode(hasTestTag("dictionary-select-${rule.name}"))
-                    onNodeWithTag("dictionary-select-${rule.name}").performClick().assertIsOn()
-                    onNodeWithTag("dictionary-selection-menu").performClick()
-                    onNodeWithTag("dictionary-share").performClick()
-                    waitUntil(timeoutMillis = 15000) { chooser.get() != null }
-                    @Suppress("DEPRECATION")
-                    val intent =
-                        checkNotNull(chooser.get())
-                            .getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
-                    assertEquals(Intent.ACTION_SEND, intent.action)
-                    assertEquals("text/*", intent.type)
-                    assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
-                    @Suppress("DEPRECATION")
-                    val uri = checkNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
-                    sharedUri = uri
-                    assertEquals("content", uri.scheme)
-                    json =
-                        context.contentResolver.openInputStream(uri)!!.bufferedReader().use {
-                            it.readText()
-                        }
+                    assertTrue("Timed out waiting for $description", condition())
                 }
+                fun actualControl(identifier: String, condition: (AccessibilityNodeInfo) -> Boolean): Boolean {
+                    val pending = ArrayDeque<AccessibilityNodeInfo>()
+                    driver.node(identifier)?.let(pending::add) ?: return false
+                    var found = false
+                    while (pending.isNotEmpty()) {
+                        val node = pending.removeFirst()
+                        if (node.isVisibleToUser && condition(node)) found = true
+                        for (i in 0 until node.childCount) node.getChild(i)?.let(pending::add)
+                        node.recycle()
+                    }
+                    return found
+                }
+                driver.enableAccessibility()
+                try {
+                    ActivityScenario.launch(DictRuleActivity::class.java).use { scenario ->
+                        await15("dictionary rows loaded") {
+                            var loaded = false
+                            scenario.onActivity { activity ->
+                                val state = activity.viewModel.state.value
+                                loaded = !state.loading && !state.busy &&
+                                    state.rules.any { it.name == rule.name } && state.rules.any { it.name == other.name }
+                            }
+                            loaded
+                        }
+                        await15("actual disabled empty-selection menu") {
+                            // The identifier labels a container; inspect the real disabled button.
+                            actualControl("dictionary-selection-menu") {
+                                it.className == "android.widget.Button" && !it.isEnabled
+                            }
+                        }
+                        scenario.onActivity { assertTrue(it.viewModel.state.value.selected.isEmpty()) }
+                        assertNull("Empty selection must not launch a share", chooser.get())
+                        val selectedId = "dictionary-select-${rule.name}"
+                        await15("actual dictionary row") {
+                            driver.node(selectedId)?.let { it.recycle(); return@await15 true }
+                            val pending = ArrayDeque<AccessibilityNodeInfo>()
+                            instrumentation.uiAutomation.rootInActiveWindow?.let(pending::add)
+                            while (pending.isNotEmpty()) {
+                                val node = pending.removeFirst()
+                                if (node.isVisibleToUser && node.isEnabled && node.isScrollable &&
+                                    node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) {
+                                    node.recycle(); pending.forEach { it.recycle() }; return@await15 false
+                                }
+                                for (i in 0 until node.childCount) node.getChild(i)?.let(pending::add)
+                                node.recycle()
+                            }
+                            false
+                        }
+                        driver.click(selectedId)
+                        await15("native and rendered dictionary selection") {
+                            var selected = false
+                            scenario.onActivity { selected = it.viewModel.state.value.selected == setOf(rule.name) }
+                            selected && actualControl(selectedId) { it.isCheckable && it.isChecked }
+                        }
+                        driver.click("dictionary-selection-menu")
+                        driver.click("dictionary-action:share")
+                        await15("dictionary share chooser") { chooser.get() != null }
+                        @Suppress("DEPRECATION")
+                        val intent =
+                            checkNotNull(chooser.get())
+                                .getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+                        assertEquals(Intent.ACTION_SEND, intent.action)
+                        assertEquals("text/*", intent.type)
+                        assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+                        @Suppress("DEPRECATION")
+                        val uri = checkNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+                        sharedUri = uri
+                        assertEquals("content", uri.scheme)
+                        json =
+                            context.contentResolver.openInputStream(uri)!!.bufferedReader().use {
+                                it.readText()
+                            }
+                    }
+                } finally { driver.close() }
             } finally {
                 instrumentation.removeMonitor(monitor)
                 sharedUri?.lastPathSegment?.let { File(context.cacheDir, it).delete() }

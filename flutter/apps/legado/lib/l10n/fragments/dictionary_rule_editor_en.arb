@@ -1,0 +1,16 @@
+{
+  "dictionaryEditorTitle": "Dictionary rule",
+  "dictionaryEditorName": "Name",
+  "dictionaryEditorUrl": "URL rule",
+  "dictionaryEditorShow": "Display rule",
+  "dictionaryEditorFullscreen": "Fullscreen editor",
+  "dictionaryEditorSave": "Save",
+  "dictionaryEditorMenu": "Menu",
+  "dictionaryEditorCopy": "Copy rule",
+  "dictionaryEditorPaste": "Paste rule",
+  "dictionaryEditorBridgeError": "Field not acknowledged. Edit it again to retry.",
+  "dictionaryEditorExit": "Exit",
+  "dictionaryEditorExitMessage": "Keep editing the unsaved rule?",
+  "dictionaryEditorKeep": "Keep editing",
+  "dictionaryEditorDiscard": "Discard changes"
+}
