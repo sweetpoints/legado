@@ -148,12 +148,12 @@ class DictionaryRuleEditScreenTest {
             instrumentation.runOnMainSync {
                 val activity = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).filterIsInstance<CodeEditActivity>().firstOrNull()
                 val editor = activity?.findViewById<CodeEditor>(R.id.editText)
-                if (editor?.text?.toString() == "@js:return 2" && editor.selectionStart == 3) child = activity
+                if (editor?.text?.toString() == "@js:return 2" && editor.cursor.left == 3) child = activity
             }
             child != null
         }
         assertEquals(3, child!!.intent.getIntExtra("cursorPosition", -1))
-        instrumentation.runOnMainSync { child!!.findViewById<CodeEditor>(R.id.editText).apply { setText("returned rule"); setSelection(4) } }
+        instrumentation.runOnMainSync { child!!.findViewById<CodeEditor>(R.id.editText).apply { setText("returned rule"); setSelection(0, 4) } }
         driver.click("code-save")
         driver.await("Actual fullscreen result returns to native draft") { state { it.showRule == "returned rule" && it.selections[2] == 4 } }
         assertEquals("@js:return 1", row()?.showRule)
