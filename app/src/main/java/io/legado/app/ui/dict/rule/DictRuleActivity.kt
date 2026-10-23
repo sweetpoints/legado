@@ -2,11 +2,17 @@ package io.legado.app.ui.dict.rule
 
 import android.os.Bundle
 import androidx.activity.viewModels
-import androidx.compose.runtime.Composable
+import android.content.Intent
+import android.widget.FrameLayout
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
+import io.legado.app.R
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import io.legado.app.base.BaseComposeActivity
+import io.legado.app.base.BaseThemedActivity
 import io.legado.app.data.repository.RoomDictionaryRuleManagementRepository
 import io.legado.app.ui.association.ImportDictRuleDialog
 import io.legado.app.ui.file.HandleFileContract
@@ -17,7 +23,7 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import java.io.File
 
-class DictRuleActivity : BaseComposeActivity() {
+class DictRuleActivity : BaseThemedActivity() {
     val viewModel by
         viewModels<DictionaryRuleManagementViewModel> {
             viewModelFactory {
@@ -42,24 +48,70 @@ class DictRuleActivity : BaseComposeActivity() {
             result.uri?.let { viewModel.exportFinished(it.toString()) }
         }
 
-    @Composable
-    override fun Content(savedInstanceState: Bundle?) {
-        DictionaryRuleManagementRoute(
-            viewModel,
-            ::finish,
-            { showDialogFragment(DictRuleEditDialog()) },
-            { showDialogFragment(DictRuleEditDialog(it)) },
-            {
-                importDoc.launch {
-                    mode = HandleFileContract.FILE
-                    allowExtensions = arrayOf("txt", "json")
-                }
-            },
-            { qrCodeResult.launch(null) },
-            { showHelp("dictRuleHelp") },
-            ::deliver,
-        )
+    override fun createContentView() {
+        setContentView(FrameLayout(this).apply { id = R.id.dictionary_manager_flutter_container })
     }
+
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
+        if (managerFragment == null) supportFragmentManager.beginTransaction()
+            .add(R.id.dictionary_manager_flutter_container, DictionaryManagerFlutterFragment(), "dictionary-manager")
+            .commitNow()
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                viewModel.state.collect {
+                    deliverPendingEffect()
+                }
+            }
+        }
+    }
+
+    private fun deliverPendingEffect() {
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+            !isFinishing && !isDestroyed && !supportFragmentManager.isStateSaved)
+            viewModel.consumeEffect()?.let(::deliver)
+    }
+
+    internal fun nativeAction(op: String, name: String? = null) {
+        check(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        check(!isFinishing && !isDestroyed && !supportFragmentManager.isStateSaved)
+        when (op) {
+            "back" -> {
+                viewModel.cancelGestures()
+                val state = viewModel.state.value
+                when {
+                    state.online -> viewModel.showOnline(false)
+                    state.deleteName != null -> viewModel.requestDelete(null)
+                    state.exportUrl != null -> viewModel.closeExport()
+                    state.passphrase != null -> viewModel.closePassphrase()
+                    else -> finish()
+                }
+            }
+            "add" -> showDialogFragment(DictRuleEditDialog())
+            "edit" -> showDialogFragment(DictRuleEditDialog(checkNotNull(name)))
+            "importFile" -> importDoc.launch {
+                mode = HandleFileContract.FILE
+                allowExtensions = arrayOf("txt", "json")
+            }
+            "importQr" -> qrCodeResult.launch(null)
+            "help" -> showHelp("dictRuleHelp")
+            else -> error("Unknown native action")
+        }
+    }
+
+    private val managerFragment: DictionaryManagerFlutterFragment?
+        get() = supportFragmentManager.findFragmentByTag("dictionary-manager") as? DictionaryManagerFlutterFragment
+    override fun onPostResume() { super.onPostResume(); managerFragment?.onPostResume(); deliverPendingEffect() }
+    override fun onNewIntent(intent: Intent) { managerFragment?.onNewIntent(intent); super.onNewIntent(intent) }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        managerFragment?.onActivityResult(requestCode, resultCode, data)
+    }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        managerFragment?.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+    override fun onUserLeaveHint() { super.onUserLeaveHint(); managerFragment?.onUserLeaveHint() }
+    override fun onTrimMemory(level: Int) { super.onTrimMemory(level); managerFragment?.onTrimMemory(level) }
 
     private fun deliver(effect: DictionaryManagementEffect) {
         when (effect.kind) {
