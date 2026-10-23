@@ -90,6 +90,8 @@ class ReplaceEditorHostTest {
         }
     }
 
+    private var renderedDiagnostic = "not requested"
+
     /** Native-to-Dart read only: observe actual controllers/viewport, never mutate the page. */
     private fun renderedState(): Map<*, *>? {
         val read = AtomicReference<Map<*, *>?>()
@@ -105,15 +107,23 @@ class ReplaceEditorHostTest {
                     .invokeMethod("renderedState", null, object : io.flutter.plugin.common.MethodChannel.Result {
                         override fun success(result: Any?) {
                             val value = result as? Map<*, *>
+                            renderedDiagnostic = "generation=${value?.get("generation")}/$generation"
                             if (value?.get("generation") == generation) read.set(value)
                             completed.countDown()
                         }
-                        override fun error(code: String, message: String?, details: Any?) { completed.countDown() }
-                        override fun notImplemented() { completed.countDown() }
+                        override fun error(code: String, message: String?, details: Any?) {
+                            renderedDiagnostic = "error=$code"
+                            completed.countDown()
+                        }
+                        override fun notImplemented() {
+                            renderedDiagnostic = "not implemented"
+                            completed.countDown()
+                        }
                     })
             }
         }
-        if (requested) completed.await(2, java.util.concurrent.TimeUnit.SECONDS)
+        if (!requested) renderedDiagnostic = "engine not ready"
+        else if (!completed.await(2, java.util.concurrent.TimeUnit.SECONDS)) renderedDiagnostic = "read timeout"
         return read.get()
     }
 
@@ -232,6 +242,15 @@ class ReplaceEditorHostTest {
         launch()
         val draft = "Long name\n".repeat(100)
         driver.setText("replace-editor-Name", draft)
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        driver.await("initial text ACK and hidden IME settle before setting the reverse selection") {
+            val actual = renderedState() ?: return@await false
+            val name = (actual["fields"] as? Map<*, *>)?.get("Name") as? Map<*, *> ?: return@await false
+            val native = model.state.value.draft[ReplaceEditorField.Name]
+            name["text"] == draft && native.text == draft && name["focused"] == true &&
+                name["start"] == native.start && name["end"] == native.end &&
+                actual["restoring"] == false && (actual["viewInsetsBottom"] as? Number)?.toDouble() == 0.0
+        }
         val field = requireNotNull(driver.node("replace-editor-Name"))
         try {
             assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, android.os.Bundle().apply {
@@ -239,13 +258,24 @@ class ReplaceEditorHostTest {
                 putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 4)
             }))
         } finally { field.recycle() }
-        androidx.test.espresso.Espresso.closeSoftKeyboard()
-        driver.await("real draft and reverse selection acknowledged before checkpoint") {
-            val actual = renderedState() ?: return@await false
-            val name = (actual["fields"] as? Map<*, *>)?.get("Name") as? Map<*, *> ?: return@await false
-            name["text"] == draft && name["start"] == 27 && name["end"] == 4 && name["focused"] == true &&
-                actual["restoring"] == false && (actual["viewInsetsBottom"] as? Number)?.toDouble() == 0.0 &&
-                model.state.value.draft[ReplaceEditorField.Name] == ReplaceEditorText(draft, 27, 4)
+        var checkpointDiagnostic = "not read"
+        try {
+            driver.await("real draft and reverse selection acknowledged before checkpoint") {
+                val actual = renderedState()
+                if (actual == null) { checkpointDiagnostic = renderedDiagnostic; return@await false }
+                val name = (actual["fields"] as? Map<*, *>)?.get("Name") as? Map<*, *>
+                val native = model.state.value.draft[ReplaceEditorField.Name]
+                checkpointDiagnostic = "renderedLength=${(name?.get("text") as? String)?.length}, " +
+                    "range=${name?.get("start")}..${name?.get("end")}, focused=${name?.get("focused")}, " +
+                    "restoring=${actual["restoring"]}, inset=${actual["viewInsetsBottom"]}, " +
+                    "offset=${actual["scrollOffset"]}, nativeLength=${native.text.length}, " +
+                    "nativeRange=${native.start}..${native.end}"
+                name != null && name["text"] == draft && name["start"] == 27 && name["end"] == 4 && name["focused"] == true &&
+                    actual["restoring"] == false && (actual["viewInsetsBottom"] as? Number)?.toDouble() == 0.0 &&
+                    native == ReplaceEditorText(draft, 27, 4)
+            }
+        } catch (failure: AssertionError) {
+            throw AssertionError("${failure.message}; $checkpointDiagnostic", failure)
         }
         // Seed the original saved viewport contract only after field/IME work has settled.
         // The next host must restore this exact offset in the actual Flutter viewport.

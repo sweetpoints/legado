@@ -107,8 +107,7 @@ class FlutterDictionaryManagerUiTest {
         assertEquals(second.showRule, appDb.dictRuleDao.getByName(second.name)!!.showRule)
     }
     @Test fun actualManagerOpensFlutterEditorAndRoomChangesReturnToRenderedList() {
-        driver.click("dictionary-more-${first.name}")
-        driver.click("dictionary-action:edit")
+        driver.click("dictionary-edit-${first.name}")
         driver.awaitIdentifier("dictionary-rule-UrlRule")
         scenario!!.onActivity {
             assertTrue(it.supportFragmentManager.fragments.any { fragment -> fragment is DictRuleEditDialog })
