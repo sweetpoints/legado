@@ -809,6 +809,72 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rssEditorType => '源类型';
 
   @override
+  String get ruleSubscriptionsTitle => '规则订阅';
+
+  @override
+  String get ruleSubscriptionsEmpty => '暂无订阅，请添加订阅地址。';
+
+  @override
+  String get ruleSubscriptionsName => '名称';
+
+  @override
+  String get ruleSubscriptionsType => '类型';
+
+  @override
+  String get ruleSubscriptionsBook => '书源';
+
+  @override
+  String get ruleSubscriptionsRss => '订阅源';
+
+  @override
+  String get ruleSubscriptionsReplace => '替换规则';
+
+  @override
+  String get ruleSubscriptionsAutomatic => '自动更新';
+
+  @override
+  String get ruleSubscriptionsSilent => '静默更新';
+
+  @override
+  String get ruleSubscriptionsInterval => '更新间隔（小时）';
+
+  @override
+  String get ruleSubscriptionsPending => '保存尚未完成，请重试完成原保存。';
+
+  @override
+  String get ruleSubscriptionsRejected => '编辑未被确认，请重新编辑该字段后再保存。';
+
+  @override
+  String get ruleSubscriptionsEmptyUrl => '请输入订阅地址。';
+
+  @override
+  String get ruleSubscriptionsDuplicate => '此订阅地址已存在。';
+
+  @override
+  String get ruleSubscriptionsMissing => '此订阅已不存在。';
+
+  @override
+  String get ruleSubscriptionsConflict => '订阅已在其他位置更改，请取消后重新打开。';
+
+  @override
+  String get ruleSubscriptionsFailure => '操作失败，请重试。';
+
+  @override
+  String get ruleSubscriptionsUp => '上移';
+
+  @override
+  String get ruleSubscriptionsDown => '下移';
+
+  @override
+  String get ruleSubscriptionsAdd => '添加';
+
+  @override
+  String get ruleSubscriptionsEdit => '编辑';
+
+  @override
+  String get ruleSubscriptionsActions => '更多操作';
+
+  @override
   String get debuggerTitle => '调试源';
 
   @override

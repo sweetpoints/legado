@@ -13,6 +13,8 @@ import org.junit.runners.Suite
     io.legado.app.ui.rss.source.debug.RssSourceDebugHostTest::class,
     io.legado.app.ui.book.source.edit.FlutterSourceEditorUiTest::class,
     io.legado.app.ui.rss.source.edit.FlutterRssSourceEditorUiTest::class,
+    io.legado.app.ui.rss.subscription.FlutterRuleSubscriptionUiTest::class,
+    io.legado.app.ui.rss.subscription.RuleSubscriptionHostTest::class,
     io.legado.app.ui.rss.source.manage.FlutterRssManagerUiTest::class,
     io.legado.app.ui.rss.source.manage.RssSourceActivityComposeTest::class,
     io.legado.app.ui.rss.favorites.RssFavoriteListRestoreTest::class,

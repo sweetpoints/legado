@@ -15,6 +15,7 @@ import 'source_editor/source_editor_page.dart';
 import 'code_editor/code_editor_page.dart';
 import 'source_debugger/source_debugger_page.dart';
 import 'rss_source_editor/rss_source_editor_page.dart';
+import 'rule_subscriptions/rule_subscription_page.dart';
 import 'rss_manager/rss_manager_page.dart';
 import 'rss_favorites/rss_favorites_page.dart';
 import 'rss_favorites/rss_favorite_config_page.dart';
@@ -44,6 +45,7 @@ Future<EmbeddedSourceConfiguration> embeddedSourceConfiguration(Ref ref) async {
         '/code-editor',
         '/source-debugger',
         '/rss-source-editor',
+        '/rule-subscriptions',
         '/rss-manager',
         '/rss-favorites',
         '/rss-favorite-config',
@@ -84,6 +86,10 @@ GoRouter embeddedSourceRouter(Ref ref) {
       GoRoute(
         path: '/rss-favorites',
         builder: (_, _) => const RssFavoritesPage(),
+      ),
+      GoRoute(
+        path: '/rule-subscriptions',
+        builder: (_, _) => const RuleSubscriptionPage(),
       ),
       GoRoute(
         path: '/rss-source-editor',

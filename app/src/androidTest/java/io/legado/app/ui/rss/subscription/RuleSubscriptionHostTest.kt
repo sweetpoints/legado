@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.fragment.app.DialogFragment
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import io.legado.app.ui.flutter.FlutterUiTestDriver
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.*
 import io.legado.app.ui.association.*
@@ -18,6 +19,9 @@ import org.junit.Assert.*
 
 class RuleSubscriptionHostTest {
     @get:Rule val compose = createEmptyComposeRule()
+    private val driver = FlutterUiTestDriver(InstrumentationRegistry.getInstrumentation())
+    @Before fun enableFlutterSemantics() { driver.enableAccessibility() }
+    @After fun restoreFlutterSemantics() { driver.close() }
     private val context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 
@@ -51,7 +55,7 @@ class RuleSubscriptionHostTest {
                 "Fixture $index",
                 payload,
                 index,
-                100000 + index,
+                -100000 + index,
                 js = "metadata",
                 showRule = "show",
                 sourceUrl = "source",
@@ -76,10 +80,7 @@ class RuleSubscriptionHostTest {
                             ImportReplaceRuleDialog::class.java,
                         )
                     rows.forEachIndexed { index, row ->
-                        compose
-                            .onNodeWithTag("subscription-list")
-                            .performScrollToNode(hasTestTag("subscription-row-${row.id}"))
-                        compose.onNodeWithTag("subscription-row-${row.id}").performClick()
+                        driver.click("subscription-row-${row.id}")
                         compose.waitUntil(10000) {
                             var opened = false
                             scenario.onActivity { activity ->

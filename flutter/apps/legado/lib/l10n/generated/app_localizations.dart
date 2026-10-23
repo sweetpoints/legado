@@ -1640,6 +1640,138 @@ abstract class AppLocalizations {
   /// **'Source type'**
   String get rssEditorType;
 
+  /// No description provided for @ruleSubscriptionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule subscriptions'**
+  String get ruleSubscriptionsTitle;
+
+  /// No description provided for @ruleSubscriptionsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No subscriptions. Add a subscription URL to begin.'**
+  String get ruleSubscriptionsEmpty;
+
+  /// No description provided for @ruleSubscriptionsName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get ruleSubscriptionsName;
+
+  /// No description provided for @ruleSubscriptionsType.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get ruleSubscriptionsType;
+
+  /// No description provided for @ruleSubscriptionsBook.
+  ///
+  /// In en, this message translates to:
+  /// **'Book sources'**
+  String get ruleSubscriptionsBook;
+
+  /// No description provided for @ruleSubscriptionsRss.
+  ///
+  /// In en, this message translates to:
+  /// **'RSS sources'**
+  String get ruleSubscriptionsRss;
+
+  /// No description provided for @ruleSubscriptionsReplace.
+  ///
+  /// In en, this message translates to:
+  /// **'Replacement rules'**
+  String get ruleSubscriptionsReplace;
+
+  /// No description provided for @ruleSubscriptionsAutomatic.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic update'**
+  String get ruleSubscriptionsAutomatic;
+
+  /// No description provided for @ruleSubscriptionsSilent.
+  ///
+  /// In en, this message translates to:
+  /// **'Silent update'**
+  String get ruleSubscriptionsSilent;
+
+  /// No description provided for @ruleSubscriptionsInterval.
+  ///
+  /// In en, this message translates to:
+  /// **'Update interval (hours)'**
+  String get ruleSubscriptionsInterval;
+
+  /// No description provided for @ruleSubscriptionsPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Save is pending. Retry to finish the existing save.'**
+  String get ruleSubscriptionsPending;
+
+  /// No description provided for @ruleSubscriptionsRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'An edit was not acknowledged. Edit the field again before saving.'**
+  String get ruleSubscriptionsRejected;
+
+  /// No description provided for @ruleSubscriptionsEmptyUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a subscription URL.'**
+  String get ruleSubscriptionsEmptyUrl;
+
+  /// No description provided for @ruleSubscriptionsDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'This URL already exists.'**
+  String get ruleSubscriptionsDuplicate;
+
+  /// No description provided for @ruleSubscriptionsMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'This subscription no longer exists.'**
+  String get ruleSubscriptionsMissing;
+
+  /// No description provided for @ruleSubscriptionsConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'The subscription changed elsewhere. Cancel and reopen it.'**
+  String get ruleSubscriptionsConflict;
+
+  /// No description provided for @ruleSubscriptionsFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'The operation failed. Retry.'**
+  String get ruleSubscriptionsFailure;
+
+  /// No description provided for @ruleSubscriptionsUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get ruleSubscriptionsUp;
+
+  /// No description provided for @ruleSubscriptionsDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Move down'**
+  String get ruleSubscriptionsDown;
+
+  /// No description provided for @ruleSubscriptionsAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get ruleSubscriptionsAdd;
+
+  /// No description provided for @ruleSubscriptionsEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get ruleSubscriptionsEdit;
+
+  /// No description provided for @ruleSubscriptionsActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Actions'**
+  String get ruleSubscriptionsActions;
+
   /// No description provided for @debuggerTitle.
   ///
   /// In en, this message translates to:

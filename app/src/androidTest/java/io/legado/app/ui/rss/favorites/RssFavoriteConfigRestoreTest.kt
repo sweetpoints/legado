@@ -67,23 +67,76 @@ class RssFavoriteConfigRestoreTest {
                     putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 5)
                 }))
             } finally { node.recycle() }
-            driver.await("Native private selection and group focus acknowledgement") {
+            val selectionDeadline = SystemClock.uptimeMillis() + 30_000
+            fun renderedSelection(): Boolean {
+                val group = driver.node("favorite-config-group") ?: return false
+                return try {
+                    group.text?.toString() == "Draft group" && group.isFocused &&
+                        group.textSelectionStart == 2 && group.textSelectionEnd == 5
+                } finally { group.recycle() }
+            }
+            driver.await("Native and rendered private selection and group focus acknowledgement") {
                 var accepted = false
                 scenario.onActivity { activity ->
                     val model = (activity.supportFragmentManager.findFragmentByTag("favorite-test") as RssFavoritesDialog).model
                     accepted = model.state.value.let { it.group == "Draft group" && it.groupStart == 2 && it.groupEnd == 5 && it.focus == "group" }
                 }
-                accepted
+                if (!accepted || !renderedSelection()) return@await false
+                // The native field command can acknowledge before the Flutter
+                // selection is projected. Recreate only after an actual frame
+                // and a fresh selected node, within the original ACK budget.
+                val committed = java.util.concurrent.CountDownLatch(1)
+                val callback = Runnable { committed.countDown() }
+                scenario.onActivity { activity ->
+                    activity.window.decorView.viewTreeObserver.registerFrameCommitCallback(callback)
+                    activity.window.decorView.postInvalidateOnAnimation()
+                }
+                try {
+                    val remaining = selectionDeadline - SystemClock.uptimeMillis()
+                    remaining > 0 && committed.await(remaining, java.util.concurrent.TimeUnit.MILLISECONDS) &&
+                        renderedSelection()
+                } finally {
+                    scenario.onActivity { it.window.decorView.viewTreeObserver.unregisterFrameCommitCallback(callback) }
+                }
             }
+            fun restoreProbe(phase: String) {
+                var native = "missing"
+                scenario.onActivity { activity ->
+                    val state = (activity.supportFragmentManager.findFragmentByTag("favorite-test") as? RssFavoritesDialog)?.model?.state?.value
+                    val insets = androidx.core.view.ViewCompat.getRootWindowInsets(activity.window.decorView)
+                    native = "loaded=${state?.loaded},loading=${state?.loading},canEdit=${state?.canEdit}," +
+                        "titleMatches=${state?.title == "Draft title"},groupMatches=${state?.group == "Draft group"}," +
+                        "focus=${state?.focus},selection=${state?.groupStart}..${state?.groupEnd}," +
+                        "windowFocus=${activity.window.decorView.hasWindowFocus()},lifecycle=${activity.lifecycle.currentState}," +
+                        "imeVisible=${insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())}"
+                }
+                val title = driver.node("favorite-config-title")
+                val group = driver.node("favorite-config-group")
+                try {
+                    android.util.Log.i("FavoriteRestoreProbe", "phase=$phase,native={$native}," +
+                        "titlePresent=${title != null},titleMatches=${title?.text?.toString() == "Draft title"}," +
+                        "groupPresent=${group != null},groupMatches=${group?.text?.toString() == "Draft group"}," +
+                        "groupFocused=${group?.isFocused},groupEnabled=${group?.isEnabled}," +
+                        "groupSelection=${group?.textSelectionStart}..${group?.textSelectionEnd}")
+                } finally { title?.recycle(); group?.recycle() }
+            }
+            restoreProbe("before-recreate")
             scenario.recreate()
             await(scenario)
-            driver.await("Actual Flutter draft and group focus restored") {
-                val group = driver.node("favorite-config-group")
-                val focused = group?.isFocused == true
-                group?.recycle()
-                driver.text("favorite-config-title") == "Draft title" &&
-                    driver.text("favorite-config-group") == "Draft group" && focused
+            restoreProbe("after-native-loaded")
+            try {
+                driver.await("Actual Flutter draft and group focus restored") {
+                    val group = driver.node("favorite-config-group")
+                    val focused = group?.isFocused == true
+                    group?.recycle()
+                    driver.text("favorite-config-title") == "Draft title" &&
+                        driver.text("favorite-config-group") == "Draft group" && focused
+                }
+            } catch (failure: AssertionError) {
+                restoreProbe("restore-failed")
+                throw failure
             }
+            restoreProbe("restore-passed")
             scenario.onActivity { activity ->
                 val dialog =
                     activity.supportFragmentManager.findFragmentByTag("favorite-test")
