@@ -2,6 +2,7 @@ package io.legado.app.ui.book.source.edit
 
 import android.content.Intent
 import android.content.SharedPreferences
+import android.os.Bundle
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -158,27 +159,113 @@ class FlutterSourceEditorUiTest {
     fun recreatedHostRestoresUnsavedFlutterDraftAndTabWithoutWritingRoom() {
         launch()
         EditorImeBarrier().use { ime ->
-            fun input(tab: Int, key: String, text: String) {
-                val deadline = SystemClock.uptimeMillis() + 30_000
-                driver.setText("source-field-$tab-$key", text) { ime.settled(true) }
-                // ACTION_SET_TEXT can update Android's predicted semantics immediately.
-                // Confirm the real private draft before hiding the IME or recreating.
-                var acknowledged = false
+            fun until(deadline: Long, description: String, condition: () -> Boolean) {
                 while (SystemClock.uptimeMillis() < deadline) {
+                    if (condition()) return
+                    SystemClock.sleep(minOf(50L, deadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
+                }
+                fail("$description; ${ime.diagnostic()}")
+            }
+            fun clickWithin(id: String, deadline: Long) {
+                until(deadline, "Missing clickable control $id") {
+                    val initial = driver.node(id) ?: return@until false
+                    val pending = ArrayDeque<AccessibilityNodeInfo>()
+                    pending.add(AccessibilityNodeInfo.obtain(initial))
+                    while (pending.isNotEmpty()) {
+                        val node = pending.removeFirst()
+                        if (node.isVisibleToUser && node.isEnabled && node.isClickable &&
+                            node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                            node.recycle(); pending.forEach { it.recycle() }; initial.recycle()
+                            return@until true
+                        }
+                        for (i in 0 until node.childCount) node.getChild(i)?.let(pending::add)
+                        node.recycle()
+                    }
+                    var ancestor: AccessibilityNodeInfo? = initial
+                    while (ancestor != null) {
+                        if (ancestor.isVisibleToUser && ancestor.isEnabled && ancestor.isClickable &&
+                            ancestor.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                            ancestor.recycle(); return@until true
+                        }
+                        val parent = ancestor.parent
+                        ancestor.recycle(); ancestor = parent
+                    }
+                    false
+                }
+            }
+            fun input(tab: Int, key: String, text: String,
+                alreadyFocused: Boolean = false, preFocus: (Long) -> Unit = {}) {
+                val deadline = SystemClock.uptimeMillis() + 30_000
+                val id = "source-field-$tab-$key"
+                ime.observedFieldId = id
+                preFocus(deadline)
+                if (!alreadyFocused) clickWithin(id, deadline)
+                until(deadline, "Focused editable source field $tab/$key") {
+                    driver.node(id)?.let { node ->
+                        try { node.isFocused && node.isEditable && node.isEnabled &&
+                            node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT } }
+                        finally { node.recycle() }
+                    } ?: false
+                }
+                ime.settled(true, deadline)
+                // The viewport boundary can replace semantics. Dispatch exactly once through
+                // the fresh real focused field, then require both rendered and private ACKs.
+                val field = requireNotNull(driver.node(id))
+                try {
+                    assertTrue(field.isFocused && field.isEditable && field.isEnabled)
+                    assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+                    }))
+                } finally { field.recycle() }
+                until(deadline, "Native and rendered source draft ACK $tab/$key") {
+                    var acknowledged = false
                     scenario!!.onActivity {
                         acknowledged = it.editorModel.state.value.document?.form?.field(tab, key)?.value == text
                     }
-                    if (acknowledged) break
-                    SystemClock.sleep(50)
+                    acknowledged && driver.text(id) == text
                 }
-                assertTrue("Native editor draft did not acknowledge field $tab/$key", acknowledged)
-                ime.settled(true)
+                ime.settled(true, deadline)
                 closeSoftKeyboard()
-                ime.settled(false)
+                ime.settled(false, deadline)
             }
             input(0, "bookSourceName", "retained draft")
-            selectTab(4)
-            input(4, "preUpdateJs", "retainedToc()")
+            input(4, "preUpdateJs", "retainedToc()", alreadyFocused = true) { deadline ->
+                revealIn("source-tab-4", "source-tabs", deadline = deadline)
+                clickWithin("source-tab-4", deadline)
+                until(deadline, "Native TOC tab with its cleared focus and rendered first field") {
+                    var nativeTab = false
+                    scenario!!.onActivity {
+                        nativeTab = it.editorModel.state.value.document?.let { doc ->
+                            doc.selectedTab == 4 && doc.focusedKey == null
+                        } == true
+                    }
+                    val firstId = "source-field-4-${projectBookSourceEditForm(source).tabs[4].first().key}"
+                    val first = driver.node(firstId)
+                    val rendered = first != null
+                    first?.recycle()
+                    nativeTab && rendered
+                }
+                ime.committedFrame(deadline)
+                // Clearing focus during the tab change has its own hide transition.
+                // Settle it before requesting the next real field's FocusNode.
+                ime.settled(false, deadline)
+                clickWithin("source-nav-4-preUpdateJs", deadline)
+                until(deadline, "Native TOC focus and actual editable field") {
+                    var focused = false
+                    scenario!!.onActivity {
+                        focused = it.editorModel.state.value.document?.let { doc ->
+                            doc.selectedTab == 4 && doc.focusedKey == "preUpdateJs"
+                        } == true
+                    }
+                    val node = driver.node("source-field-4-preUpdateJs")
+                    val rendered = node?.let {
+                        try { it.isFocused && it.isEditable && it.isEnabled }
+                        finally { it.recycle() }
+                    } ?: false
+                    focused && rendered
+                }
+                ime.committedFrame(deadline)
+            }
         }
         scenario!!.recreate()
         driver.awaitIdentifier("source-field-4-preUpdateJs")
@@ -430,27 +517,48 @@ class FlutterSourceEditorUiTest {
     private inner class EditorImeBarrier : AutoCloseable {
         private val runningImeAnimations = mutableSetOf<WindowInsetsAnimationCompat>()
         private lateinit var root: View
+        private var prepared = 0
+        private var ended = 0
+        var observedFieldId: String? = null
         init {
             scenario!!.onActivity { activity ->
                 root = activity.window.decorView
                 ViewCompat.setWindowInsetsAnimationCallback(root,
                     object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
                         override fun onPrepare(animation: WindowInsetsAnimationCompat) {
-                            if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0)
+                            if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
+                                prepared++
                                 runningImeAnimations.add(animation)
+                            }
                         }
                         override fun onProgress(
                             insets: WindowInsetsCompat,
                             runningAnimations: MutableList<WindowInsetsAnimationCompat>,
                         ): WindowInsetsCompat = insets
                         override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                            if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) ended++
                             runningImeAnimations.remove(animation)
                         }
                     })
             }
         }
-        fun settled(visible: Boolean) {
-            driver.await("IME visible=$visible and viewport animation completed") {
+        fun diagnostic(): String {
+            var result = ""
+            instrumentation.runOnMainSync {
+                val insets = ViewCompat.getRootWindowInsets(root)
+                result = "attached=${root.isAttachedToWindow},laidOut=${root.isLaidOut}," +
+                    "visible=${insets?.isVisible(WindowInsetsCompat.Type.ime())}," +
+                    "bottom=${insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom}," +
+                    "running=${runningImeAnimations.size},prepared=$prepared,ended=$ended"
+            }
+            val node = observedFieldId?.let(driver::node)
+            return result + (node?.let {
+                try { ",focused=${it.isFocused},editable=${it.isEditable},enabled=${it.isEnabled}" }
+                finally { it.recycle() }
+            } ?: ",observedFieldMissing=true")
+        }
+        fun settled(visible: Boolean, deadline: Long? = null) {
+            fun ready(): Boolean {
                 var settled = false
                 instrumentation.runOnMainSync {
                     val insets = ViewCompat.getRootWindowInsets(root)
@@ -458,16 +566,40 @@ class FlutterSourceEditorUiTest {
                         insets?.isVisible(WindowInsetsCompat.Type.ime()) == visible &&
                         runningImeAnimations.isEmpty()
                 }
-                settled
+                return settled
             }
+            if (deadline == null) {
+                try { driver.await("IME visible=$visible and viewport animation completed", ::ready) }
+                catch (failure: AssertionError) {
+                    throw AssertionError("${failure.message}; ${diagnostic()}", failure)
+                }
+            } else {
+                var accepted = false
+                while (SystemClock.uptimeMillis() < deadline) {
+                    if (ready()) { accepted = true; break }
+                    SystemClock.sleep(minOf(50L, deadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
+                }
+                assertTrue("IME visible=$visible did not settle within input phase; ${diagnostic()}", accepted)
+            }
+            committedFrame(deadline)
+            val idleBudget = deadline?.let { minOf(5_000L, it - SystemClock.uptimeMillis()) } ?: 5_000L
+            assertTrue("Input phase exhausted before viewport idle; ${diagnostic()}", idleBudget >= 100)
+            instrumentation.uiAutomation.waitForIdle(100, idleBudget)
+            if (deadline != null) assertTrue("Input phase exceeded while settling viewport; ${diagnostic()}",
+                SystemClock.uptimeMillis() < deadline)
+        }
+        fun committedFrame(deadline: Long? = null) {
             val committed = CountDownLatch(1)
             instrumentation.runOnMainSync {
                 assertTrue(root.isAttachedToWindow && root.isHardwareAccelerated)
                 root.viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
                 root.postInvalidateOnAnimation()
             }
-            assertTrue("Editor viewport frame was not committed", committed.await(5, TimeUnit.SECONDS))
-            instrumentation.uiAutomation.waitForIdle(100, 5_000)
+            val frameBudget = deadline?.let { minOf(5_000L, it - SystemClock.uptimeMillis()).coerceAtLeast(0) } ?: 5_000L
+            val accepted = committed.await(frameBudget, TimeUnit.MILLISECONDS)
+            assertTrue("Editor viewport frame was not committed; ${diagnostic()}", accepted)
+            if (deadline != null) assertTrue("Input phase exceeded committing viewport; ${diagnostic()}",
+                SystemClock.uptimeMillis() < deadline)
         }
         override fun close() {
             instrumentation.runOnMainSync { ViewCompat.setWindowInsetsAnimationCallback(root, null) }
@@ -497,10 +629,11 @@ class FlutterSourceEditorUiTest {
     private fun revealField(tab: Int, key: String) = revealIn("source-field-$tab-$key", "source-fields-$tab")
 
     @Suppress("DEPRECATION")
-    private fun revealIn(target: String, container: String?, backwards: Boolean = false) {
-        val deadline = SystemClock.uptimeMillis() + 30_000
+    private fun revealIn(target: String, container: String?, backwards: Boolean = false,
+        deadline: Long? = null) {
+        val phaseDeadline = deadline ?: (SystemClock.uptimeMillis() + 30_000)
         var scrolls = 0
-        while (SystemClock.uptimeMillis() < deadline) {
+        while (SystemClock.uptimeMillis() < phaseDeadline) {
             driver.node(target)?.let { it.recycle(); return }
             val root = if (container == null) instrumentation.uiAutomation.rootInActiveWindow else driver.node(container)
             val pending = ArrayDeque<AccessibilityNodeInfo>()
@@ -517,8 +650,10 @@ class FlutterSourceEditorUiTest {
             if (scrolled) {
                 scrolls++
                 assertTrue("Exceeded scroll bound revealing $target", scrolls <= 60)
-                SystemClock.sleep(100)
-            } else SystemClock.sleep(50)
+                SystemClock.sleep(if (deadline == null) 100 else
+                    minOf(100L, phaseDeadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
+            } else SystemClock.sleep(if (deadline == null) 50 else
+                minOf(50L, phaseDeadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
         }
         fail("Missing rendered editor field/control $target in $container")
     }

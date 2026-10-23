@@ -844,6 +844,76 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rssEditorType => 'Source type';
 
   @override
+  String get ruleSubscriptionsTitle => 'Rule subscriptions';
+
+  @override
+  String get ruleSubscriptionsEmpty =>
+      'No subscriptions. Add a subscription URL to begin.';
+
+  @override
+  String get ruleSubscriptionsName => 'Name';
+
+  @override
+  String get ruleSubscriptionsType => 'Type';
+
+  @override
+  String get ruleSubscriptionsBook => 'Book sources';
+
+  @override
+  String get ruleSubscriptionsRss => 'RSS sources';
+
+  @override
+  String get ruleSubscriptionsReplace => 'Replacement rules';
+
+  @override
+  String get ruleSubscriptionsAutomatic => 'Automatic update';
+
+  @override
+  String get ruleSubscriptionsSilent => 'Silent update';
+
+  @override
+  String get ruleSubscriptionsInterval => 'Update interval (hours)';
+
+  @override
+  String get ruleSubscriptionsPending =>
+      'Save is pending. Retry to finish the existing save.';
+
+  @override
+  String get ruleSubscriptionsRejected =>
+      'An edit was not acknowledged. Edit the field again before saving.';
+
+  @override
+  String get ruleSubscriptionsEmptyUrl => 'Enter a subscription URL.';
+
+  @override
+  String get ruleSubscriptionsDuplicate => 'This URL already exists.';
+
+  @override
+  String get ruleSubscriptionsMissing => 'This subscription no longer exists.';
+
+  @override
+  String get ruleSubscriptionsConflict =>
+      'The subscription changed elsewhere. Cancel and reopen it.';
+
+  @override
+  String get ruleSubscriptionsFailure => 'The operation failed. Retry.';
+
+  @override
+  String get ruleSubscriptionsUp => 'Move up';
+
+  @override
+  String get ruleSubscriptionsDown => 'Move down';
+
+  @override
+  String get ruleSubscriptionsAdd => 'Add';
+
+  @override
+  String get ruleSubscriptionsEdit => 'Edit';
+
+  @override
+  String get ruleSubscriptionsActions => 'Actions';
+
+  @override
   String get debuggerTitle => 'Source debugger';
 
   @override
