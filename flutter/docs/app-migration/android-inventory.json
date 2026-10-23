@@ -224,8 +224,6 @@
       "app/src/main/java/io/legado/app/ui/config/WelcomeSettingsScreen.kt",
       "app/src/main/java/io/legado/app/ui/dict/DictionaryLookupRoute.kt",
       "app/src/main/java/io/legado/app/ui/dict/DictionaryLookupScreen.kt",
-      "app/src/main/java/io/legado/app/ui/dict/rule/DictionaryRuleEditRoute.kt",
-      "app/src/main/java/io/legado/app/ui/dict/rule/DictionaryRuleEditScreen.kt",
       "app/src/main/java/io/legado/app/ui/dict/rule/DictionaryRuleManagementRoute.kt",
       "app/src/main/java/io/legado/app/ui/dict/rule/DictionaryRuleManagementScreen.kt",
       "app/src/main/java/io/legado/app/ui/file/FileManagementRoute.kt",

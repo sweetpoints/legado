@@ -7,6 +7,7 @@ import org.junit.runners.Suite
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
     io.legado.app.ui.flutter.EmbeddedFlutterActivityTest::class,
+    io.legado.app.ui.dict.rule.DictionaryRuleEditScreenTest::class,
     io.legado.app.ui.flutter.FlutterSourceDebuggerHostTest::class,
     io.legado.app.ui.book.source.edit.FlutterDebuggerReturnChainTest::class,
     io.legado.app.ui.book.source.debug.BookSourceDebugHostTest::class,

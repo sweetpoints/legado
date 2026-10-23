@@ -8,15 +8,17 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.ViewGroup
-import android.view.WindowManager
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.Composable
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.FrameLayout
+import androidx.lifecycle.lifecycleScope
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.base.BaseComposeDialogFragment
+import io.legado.app.base.BaseDialogFragment
 import io.legado.app.data.repository.RoomDictionaryRuleRepository
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.utils.getClipText
@@ -24,7 +26,7 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
 
-class DictRuleEditDialog() : BaseComposeDialogFragment() {
+class DictRuleEditDialog() : BaseDialogFragment(0) {
     constructor(name: String) : this() {
         arguments = Bundle().apply { putString("name", name) }
     }
@@ -56,6 +58,7 @@ class DictRuleEditDialog() : BaseComposeDialogFragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setStyle(STYLE_NO_TITLE, 0)
         isCancelable = false
     }
 
@@ -68,48 +71,50 @@ class DictRuleEditDialog() : BaseComposeDialogFragment() {
         }
         dialog?.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_BACK) {
-                if (event.action == KeyEvent.ACTION_UP) viewModel.requestClose()
+                if (event.action == KeyEvent.ACTION_UP) coordinator.requestClose()
                 true
             } else false
         }
     }
 
-    override fun onComposeCreated(savedInstanceState: Bundle?) {
-        view?.setBackgroundColor(Color.TRANSPARENT)
-    }
-
     override fun onResume() {
         super.onResume()
         view?.setBackgroundColor(Color.TRANSPARENT)
+        view?.post { if (isResumed) (childFragmentManager.findFragmentByTag("dictionary-editor-flutter") as? DictionaryRuleEditFlutterFragment)?.onPostResume() }
     }
 
     override fun dismiss() {
-        viewModel.requestClose()
+        coordinator.requestClose()
     }
 
-    @Composable
-    override fun Content() {
-        DictionaryRuleEditRoute(
-            viewModel,
+    internal val coordinator by lazy {
+        DictionaryRuleEditNativeCoordinator(viewModel, lifecycle, lifecycleScope,
+            { isAdded && !parentFragmentManager.isStateSaved },
             { request ->
-                val title =
-                    when (request.field) {
-                        DictionaryRuleField.Name -> R.string.name
-                        DictionaryRuleField.UrlRule -> R.string.url_rule
-                        DictionaryRuleField.ShowRule -> R.string.show_rule
-                    }
-                textEditLauncher.launch(
-                    Intent(requireActivity(), CodeEditActivity::class.java).apply {
-                        putExtra("text", request.text)
-                        putExtra("title", getString(title))
-                        putExtra("cursorPosition", request.cursor)
-                    }
-                )
-            },
-            { requireContext().sendToClip(it) },
-            { requireContext().getClipText() },
-            { toastOnUi(R.string.please_focus_cursor_on_textbox) },
-            ::dismissAllowingStateLoss,
-        )
+                val title = when (request.field) {
+                    DictionaryRuleField.Name -> R.string.name
+                    DictionaryRuleField.UrlRule -> R.string.url_rule
+                    DictionaryRuleField.ShowRule -> R.string.show_rule
+                }
+                textEditLauncher.launch(Intent(requireActivity(), CodeEditActivity::class.java).apply {
+                    putExtra("text", request.text)
+                    putExtra("title", getString(title))
+                    putExtra("cursorPosition", request.cursor)
+                })
+            }, { requireContext().sendToClip(it) }, { requireContext().getClipText() },
+            { toastOnUi(R.string.please_focus_cursor_on_textbox) }, ::dismissAllowingStateLoss)
     }
+
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+        FrameLayout(requireContext()).apply { id = R.id.dictionary_rule_editor_flutter_content }
+
+    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+        view.setBackgroundColor(Color.TRANSPARENT)
+        coordinator
+        if (childFragmentManager.findFragmentByTag("dictionary-editor-flutter") == null)
+            childFragmentManager.beginTransaction().add(R.id.dictionary_rule_editor_flutter_content,
+                DictionaryRuleEditFlutterFragment(), "dictionary-editor-flutter").commitNow()
+    }
+
+    override fun onDestroy() { coordinator.close(); super.onDestroy() }
 }

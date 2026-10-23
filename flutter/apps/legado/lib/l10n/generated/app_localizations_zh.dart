@@ -1498,4 +1498,46 @@ class AppLocalizationsZh extends AppLocalizations {
   String sourcesPage(int page) {
     return '第 $page 页';
   }
+
+  @override
+  String get dictionaryEditorTitle => '字典规则';
+
+  @override
+  String get dictionaryEditorName => '名称';
+
+  @override
+  String get dictionaryEditorUrl => 'URL 规则';
+
+  @override
+  String get dictionaryEditorShow => '显示规则';
+
+  @override
+  String get dictionaryEditorFullscreen => '全屏编辑';
+
+  @override
+  String get dictionaryEditorSave => '保存';
+
+  @override
+  String get dictionaryEditorMenu => '菜单';
+
+  @override
+  String get dictionaryEditorCopy => '复制规则';
+
+  @override
+  String get dictionaryEditorPaste => '粘贴规则';
+
+  @override
+  String get dictionaryEditorBridgeError => '字段尚未确认，请重试编辑';
+
+  @override
+  String get dictionaryEditorExit => '退出';
+
+  @override
+  String get dictionaryEditorExitMessage => '尚未保存，是否继续编辑？';
+
+  @override
+  String get dictionaryEditorKeep => '继续编辑';
+
+  @override
+  String get dictionaryEditorDiscard => '放弃修改';
 }

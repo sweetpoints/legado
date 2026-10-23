@@ -3001,6 +3001,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Page {page}'**
   String sourcesPage(int page);
+
+  /// No description provided for @dictionaryEditorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Dictionary rule'**
+  String get dictionaryEditorTitle;
+
+  /// No description provided for @dictionaryEditorName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get dictionaryEditorName;
+
+  /// No description provided for @dictionaryEditorUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'URL rule'**
+  String get dictionaryEditorUrl;
+
+  /// No description provided for @dictionaryEditorShow.
+  ///
+  /// In en, this message translates to:
+  /// **'Display rule'**
+  String get dictionaryEditorShow;
+
+  /// No description provided for @dictionaryEditorFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Fullscreen editor'**
+  String get dictionaryEditorFullscreen;
+
+  /// No description provided for @dictionaryEditorSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get dictionaryEditorSave;
+
+  /// No description provided for @dictionaryEditorMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Menu'**
+  String get dictionaryEditorMenu;
+
+  /// No description provided for @dictionaryEditorCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy rule'**
+  String get dictionaryEditorCopy;
+
+  /// No description provided for @dictionaryEditorPaste.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste rule'**
+  String get dictionaryEditorPaste;
+
+  /// No description provided for @dictionaryEditorBridgeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Field not acknowledged. Edit it again to retry.'**
+  String get dictionaryEditorBridgeError;
+
+  /// No description provided for @dictionaryEditorExit.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit'**
+  String get dictionaryEditorExit;
+
+  /// No description provided for @dictionaryEditorExitMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing the unsaved rule?'**
+  String get dictionaryEditorExitMessage;
+
+  /// No description provided for @dictionaryEditorKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing'**
+  String get dictionaryEditorKeep;
+
+  /// No description provided for @dictionaryEditorDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes'**
+  String get dictionaryEditorDiscard;
 }
 
 class _AppLocalizationsDelegate

@@ -19,6 +19,7 @@ import 'rule_subscriptions/rule_subscription_page.dart';
 import 'rss_manager/rss_manager_page.dart';
 import 'rss_favorites/rss_favorites_page.dart';
 import 'rss_favorites/rss_favorite_config_page.dart';
+import 'dictionary_rule_editor/dictionary_rule_editor_page.dart';
 
 part 'embedded_source_management.g.dart';
 
@@ -49,6 +50,7 @@ Future<EmbeddedSourceConfiguration> embeddedSourceConfiguration(Ref ref) async {
         '/rss-manager',
         '/rss-favorites',
         '/rss-favorite-config',
+        '/dictionary-rule-editor',
       ].contains(result['route']) ||
       !['zh', 'en'].contains(result['locale']) ||
       !['system', 'light', 'dark'].contains(result['theme'])) {
@@ -78,6 +80,10 @@ GoRouter embeddedSourceRouter(Ref ref) {
     restorationScopeId: 'embedded-router',
     initialLocation: configuration.route,
     routes: [
+      GoRoute(
+        path: '/dictionary-rule-editor',
+        builder: (_, _) => const DictionaryRuleEditorPage(),
+      ),
       GoRoute(path: '/rss-manager', builder: (_, _) => const RssManagerPage()),
       GoRoute(
         path: '/rss-favorite-config',
