@@ -179,6 +179,11 @@ class ReplaceEditorViewModel(
         mutable.value = state.value.copy(focus = field)
     }
 
+    fun clearFocus() {
+        savedState.remove<String>("replaceEditor.focus")
+        mutable.value = state.value.copy(focus = null)
+    }
+
     fun flags(
         regex: Boolean = state.value.draft.regex,
         title: Boolean = state.value.draft.title,
@@ -330,10 +335,10 @@ class ReplaceEditorViewModel(
         mutable.value = state.value.copy(finished = true, saved = saved, exit = false)
     }
 
-    fun close() {
+    fun close(forceDirty: Boolean = false) {
         if (state.value.busy || state.value.editor != null || state.value.finished) return
         val value = document
-        if (value != null && !value.draft.sameContent(value.baseline)) {
+        if (forceDirty || (value != null && !value.draft.sameContent(value.baseline))) {
             savedState["replaceEditor.exit"] = true
             mutable.value = state.value.copy(exit = true)
         } else markFinished(false)
