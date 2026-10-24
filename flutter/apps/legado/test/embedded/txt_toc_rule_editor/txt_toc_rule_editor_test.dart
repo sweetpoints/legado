@@ -32,11 +32,13 @@ void main() {
   late List<Map> calls;
   bool reject = false;
   Completer<void>? fieldGate;
+  Completer<Object?>? snapshotGate;
   setUp(() {
     native = fixture();
     calls = [];
     reject = false;
     fieldGate = null;
+    snapshotGate = null;
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
       events,
       (_) async => null,
@@ -44,7 +46,10 @@ void main() {
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
       call,
     ) async {
-      if (call.method == 'snapshot') return native;
+      if (call.method == 'snapshot') {
+        final gate = snapshotGate;
+        return gate == null ? native : await gate.future;
+      }
       final args = call.arguments as Map;
       calls.add(args);
       if (args['op'] == 'field') {
@@ -199,6 +204,81 @@ void main() {
       expect(native['Replacement'], '@js:return 2');
       expect(native['Example'], 'Chapter One');
       expect(calls.last['op'], 'save');
+    },
+  );
+  testWidgets(
+    'cold snapshot cannot expose the native load Retry identity before its state arrives',
+    (tester) async {
+      native = {
+        ...fixture(),
+        'loadFailed': true,
+        'canEdit': false,
+        'error': 'missing original',
+      };
+      snapshotGate = Completer<Object?>();
+      await app(tester);
+      expect(find.text('Retry'), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      snapshotGate!.complete(native);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('missing original'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      await tester.tap(find.text('Retry'));
+      await tester.pump();
+      await tester.pump();
+      expect(calls.map((call) => call['op']), ['retry']);
+    },
+  );
+  testWidgets(
+    'bridge failure reconnect has a distinct identity before native load Retry',
+    (tester) async {
+      snapshotGate = Completer<Object?>();
+      await app(tester);
+      snapshotGate!.completeError(
+        PlatformException(code: 'snapshot_unavailable'),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.identifier == 'txt-toc-editor-bridge-retry',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.identifier == 'txt-toc-editor-retry',
+        ),
+        findsNothing,
+      );
+      native = {
+        ...fixture(),
+        'loadFailed': true,
+        'canEdit': false,
+        'error': 'missing original',
+      };
+      snapshotGate = null;
+      await tester.tap(find.text('Retry'));
+      await tester.pump();
+      await tester.pump();
+      expect(calls, isEmpty);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.identifier == 'txt-toc-editor-retry',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Retry'));
+      await tester.pump();
+      await tester.pump();
+      expect(calls.map((call) => call['op']), ['retry']);
     },
   );
   testWidgets(
