@@ -427,4 +427,136 @@ void main() {
       await tester.pumpAndSettle();
     },
   );
+  test(
+    'late retired binding field failure cannot reject the new binding',
+    () async {
+      final bridge = ReplaceManagerBridge();
+      await bridge.start();
+      final gate = Completer<void>();
+      before = (args) async {
+        if (args['op'] == 'query') {
+          await gate.future;
+          throw PlatformException(code: 'retired_binding');
+        }
+      };
+      final old = bridge.command('query', {
+        'text': 'old private',
+        'start': 11,
+        'end': 3,
+      });
+      final rejected = expectLater(old, throwsA(isA<PlatformException>()));
+      await Future<void>.delayed(Duration.zero);
+      native = {...fixture(), 'binding': 'replacement'};
+      await bridge.refresh();
+      gate.complete();
+      await rejected;
+      expect(bridge.latest!.binding, 'replacement');
+      expect(bridge.rejectedField, null);
+      await bridge.command('effect', {'action': 'Share', 'id': null});
+      expect(commands.last['binding'], 'replacement');
+      expect(commands.last['op'], 'effect');
+      await bridge.close();
+    },
+  );
+  testWidgets(
+    'one visible modal cancel settles a prior pending query rejection in queue order',
+    (tester) async {
+      final gate = Completer<void>();
+      before = (args) async {
+        if (args['op'] == 'query') {
+          await gate.future;
+          throw PlatformException(code: 'field_rejected');
+        }
+      };
+      await tester.pumpWidget(const MaterialApp(home: ReplaceManagerPage()));
+      await tester.pumpAndSettle();
+      final queryField = find.byWidgetPredicate(
+        (w) =>
+            w is Semantics && w.properties.identifier == 'replace-rule-search',
+      );
+      await tester.enterText(
+        find.descendant(of: queryField, matching: find.byType(TextField)),
+        'pending private',
+      );
+      await tester.pump();
+      native = {
+        ...native,
+        'dialog': 'AddGroup',
+        'revision': (native['revision']! as int) + 1,
+      };
+      await messenger.handlePlatformMessage(
+        'legado/replace_manager/state',
+        const StandardMethodCodec().encodeSuccessEnvelope(native),
+        (_) {},
+      );
+      await tester.pump();
+      final cancel = find.byWidgetPredicate(
+        (w) =>
+            w is Semantics &&
+            w.properties.identifier == 'replace-rule-dialog-cancel',
+      );
+      await tester.tap(
+        find.descendant(of: cancel, matching: find.byType(TextButton)),
+      );
+      await tester.pump();
+      expect(commands.map((v) => v['op']).toList(), ['query']);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(commands.map((v) => v['op']).toList(), [
+        'query',
+        'cancelQuery',
+        'cancelDialog',
+      ]);
+      expect(native['dialog'], null);
+      expect(find.text('pending private'), findsNothing);
+      expect(commands.any((v) => v['op'] == 'back'), false);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    },
+  );
+  test(
+    'late retired binding field ACK cannot poison the replacement owner',
+    () async {
+      final gate = Completer<void>();
+      messenger.setMockMethodCallHandler(ReplaceManagerBridge.channel, (
+        call,
+      ) async {
+        if (call.method == 'snapshot') return {...native};
+        final args = Map<String, Object?>.from(call.arguments as Map);
+        commands.add(args);
+        if (args['op'] == 'query') {
+          await gate.future;
+          return {
+            ...fixture(),
+            'revision': 2,
+            'query': args['text'],
+            'queryStart': args['start'],
+            'queryEnd': args['end'],
+          };
+        }
+        native = {...native, 'revision': (native['revision']! as int) + 1};
+        return {...native};
+      });
+      final bridge = ReplaceManagerBridge();
+      await bridge.start();
+      final old = bridge.command('query', {
+        'text': 'old private',
+        'start': 11,
+        'end': 3,
+      });
+      final rejected = expectLater(old, throwsStateError);
+      await Future<void>.delayed(Duration.zero);
+      native = {...fixture(), 'binding': 'replacement'};
+      await bridge.refresh();
+      gate.complete();
+      await rejected;
+      expect(bridge.latest!.binding, 'replacement');
+      expect(bridge.latest!.text('query'), '');
+      expect(bridge.rejectedField, null);
+      await bridge.command('effect', {'action': 'Share', 'id': null});
+      expect(commands.last['binding'], 'replacement');
+      expect(commands.last['op'], 'effect');
+      await bridge.close();
+    },
+  );
 }

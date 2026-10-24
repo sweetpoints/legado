@@ -116,11 +116,6 @@ class _ReplaceManagerPageState extends State<ReplaceManagerPage>
     Map<String, Object?> values = const {},
   ]) async {
     try {
-      // A modal cancel is also an explicit discard of a rejected background filter.
-      // Its own native cancel ACK must succeed before cancelling the modal.
-      if (op == 'cancelDialog' && bridge.rejectedField == 'query') {
-        await bridge.command('cancelQuery');
-      }
       await bridge.command(op, values);
       if (mounted) setState(() => failed = false);
     } catch (_) {
