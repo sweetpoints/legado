@@ -1,3 +1,4 @@
+// Compatibility fixture for the original Compose presentation. Normal Activity uses Flutter.
 package io.legado.app.ui.replace
 
 import androidx.compose.runtime.*

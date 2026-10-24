@@ -23,6 +23,7 @@ import io.legado.app.help.config.ReplacePreviewConfig
 import io.legado.app.ui.book.toc.rule.TxtTocRuleActivity
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.highlight.HighlightRuleActivity
+import io.legado.app.ui.replace.ReplaceManagerUiProbe
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
@@ -148,21 +149,29 @@ class RuleSelectionShareTest {
             var json = ""
             var exportPath: String? = null
             try {
-                runAndroidComposeUiTest<ReplaceRuleActivity> {
-                    waitUntil(timeoutMillis = 15000) {
-                        val rows = activity?.managementModel?.state?.value?.rows.orEmpty()
-                        rows.any { it.id == rule.id } && rows.any { it.id == other.id }
+                ReplaceManagerUiProbe(instrumentation).use { ui ->
+                  ActivityScenario.launch(ReplaceRuleActivity::class.java).use { scenario ->
+                    ui.await15("replacement rows loaded") {
+                        var loaded = false
+                        scenario.onActivity { activity ->
+                            val state = activity.managementModel.state.value
+                            loaded = state.loaded && !state.busy && state.rows.any { it.id == rule.id } && state.rows.any { it.id == other.id }
+                        }
+                        loaded
                     }
-                    onNodeWithTag("replace-rule-selection-menu").performClick()
-                    onNodeWithTag("replace-rule-share").performClick()
-                    waitForIdle()
+                    ui.click("replace-rule-selection-menu")
+                    ui.click("replace-rule-action:share")
+                    ui.await15("empty share ignored and menu dismissed") {
+                        ui.driver.node("replace-rule-action:share")?.let { it.recycle(); false } ?: true
+                    }
                     assertNull(chooser.get())
-                    onNodeWithTag("replace-rule-list")
-                        .performScrollToNode(hasTestTag("replace-rule-select-${rule.id}"))
-                    onNodeWithTag("replace-rule-select-${rule.id}").performClick().assertIsOn()
-                    onNodeWithTag("replace-rule-selection-menu").performClick()
-                    onNodeWithTag("replace-rule-share").performClick()
-                    waitUntil(timeoutMillis = 15000) { chooser.get() != null }
+                    ui.reveal("replace-rule-select-${rule.id}")
+                    ui.click("replace-rule-select-${rule.id}")
+                    ui.await15("actual checked replacement") { ui.checked("replace-rule-select-${rule.id}", true) }
+                    scenario.onActivity { assertEquals(setOf(rule.id), it.managementModel.state.value.selected) }
+                    ui.click("replace-rule-selection-menu")
+                    ui.click("replace-rule-action:share")
+                    ui.await15("replacement chooser") { chooser.get() != null }
                     @Suppress("DEPRECATION")
                     val intent =
                         checkNotNull(chooser.get())
@@ -177,13 +186,10 @@ class RuleSelectionShareTest {
                         context.contentResolver.openInputStream(uri)!!.bufferedReader().use {
                             it.readText()
                         }
-                    exportPath =
-                        activity?.managementModel?.state?.value?.let { _ ->
-                            File(context.filesDir, "replace-management-export")
-                                .listFiles()
-                                ?.firstOrNull { it.readText() == json }
-                                ?.path
-                        }
+                    exportPath = File(context.filesDir, "replace-management-export")
+                        .listFiles()?.firstOrNull { it.readText() == json }?.path
+                    assertTrue("Native owned export exists", exportPath != null)
+                  }
                 }
             } finally {
                 instrumentation.removeMonitor(monitor)
