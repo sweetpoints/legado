@@ -44,6 +44,9 @@ abstract class NamedGroupDialog : BaseDialogFragment(0) {
     }
     override fun onStart() {
         super.onStart(); setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        // Keep this independent floating Dialog window non-fullscreen and frame-fitted.
+        // NamedGroupsPage consumes the already-fitted bottom IME inset at its own boundary;
+        // switching this host to a fullscreen/edge-to-edge window requires changing that policy.
         dialog?.window?.apply { setBackgroundDrawableResource(R.color.transparent); resizeForIme() }
         dialog?.setOnKeyListener { _, key, event ->
             if (key == KeyEvent.KEYCODE_BACK) {

@@ -366,4 +366,110 @@ void main() {
       expect(calls, isEmpty);
     },
   );
+  testWidgets(
+    'native resized IME viewport restores the focused raw group field without a second inset subtraction',
+    (tester) async {
+      tester.view.devicePixelRatio = 2.625;
+      tester.view.physicalSize = const Size(1080, 1794);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetViewInsets);
+      native = {
+        ...fixture(editing: true),
+        'name': 'raw😀组名',
+        'start': 2,
+        'end': 5,
+      };
+      await app(tester);
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      // Captured Android recreation: native Window/FlutterView are already 985 px
+      // high, while the embedding still reports the 809 px IME inset at DPR2.625.
+      tester.view.physicalSize = const Size(1080, 985);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 809);
+      native = {...native, 'generation': 2, 'revision': 1};
+      await app(tester);
+      await tester.pumpAndSettle();
+      final layoutErrors = <Object>[];
+      Object? error;
+      while ((error = tester.takeException()) != null) {
+        layoutErrors.add(error!);
+      }
+      expect(
+        layoutErrors,
+        isEmpty,
+        reason: 'Native owns resize; Flutter must not shrink the already resized local viewport again',
+      );
+      final fieldFinder = find.bySemanticsIdentifier('named-group-name');
+      expect(fieldFinder.hitTestable(), findsOneWidget);
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.controller!.text, 'raw😀组名');
+      expect(
+        field.controller!.selection,
+        const TextSelection(baseOffset: 2, extentOffset: 5),
+      );
+      expect(field.focusNode!.hasFocus, true);
+      final bounds = tester.getRect(fieldFinder);
+      expect(bounds.height, greaterThanOrEqualTo(48));
+      expect(bounds.top, greaterThanOrEqualTo(0));
+      expect(bounds.bottom, lessThanOrEqualTo(985 / 2.625));
+      expect(
+        find.bySemanticsIdentifier('named-group-confirm').hitTestable(),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier('named-group-cancel').hitTestable(),
+        findsOneWidget,
+      );
+      expect(calls, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'genuinely short native IME viewport can scroll to the restored field while keeping actions reachable',
+    (tester) async {
+      tester.view.devicePixelRatio = 2.625;
+      tester.view.physicalSize = const Size(1080, 473);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 809);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetViewInsets);
+      native = {
+        ...fixture(editing: true),
+        'name': 'raw😀组名',
+        'start': 2,
+        'end': 5,
+      };
+      await app(tester);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byType(TextField));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final fieldFinder = find.bySemanticsIdentifier('named-group-name');
+      expect(fieldFinder.hitTestable(), findsOneWidget);
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.controller!.text, 'raw😀组名');
+      expect(
+        field.controller!.selection,
+        const TextSelection(baseOffset: 2, extentOffset: 5),
+      );
+      expect(field.focusNode!.hasFocus, true);
+      final bounds = tester.getRect(fieldFinder);
+      expect(bounds.height, greaterThanOrEqualTo(48));
+      expect(bounds.top, greaterThanOrEqualTo(0));
+      expect(bounds.bottom, lessThanOrEqualTo(473 / 2.625));
+      expect(
+        find.bySemanticsIdentifier('named-group-confirm').hitTestable(),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier('named-group-cancel').hitTestable(),
+        findsOneWidget,
+      );
+      await tester.enterText(find.byType(TextField), 'edited😀');
+      await tester.pump();
+      expect(calls.last['op'], 'field');
+      expect(calls.last['text'], 'edited😀');
+    },
+  );
 }
