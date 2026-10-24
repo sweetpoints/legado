@@ -471,8 +471,43 @@ class HighlightGroupUiTest {
             actual.click("highlight-management-selection-menu")
             actual.click("highlight-management-export")
             compose.onNodeWithText(context.getString(R.string.upload_url)).performClick()
-            actual.await15("actual export URL/summary receipt") {
-                actual.text("highlight-management-export-result") == url && actual.text("highlight-management-export-summary") == summary
+            try {
+                // The upload chooser remains native Compose. Its result-delivery LaunchedEffect
+                // must advance under Compose v2 while the Flutter receipt is checked exactly.
+                compose.waitUntil(timeoutMillis = 15_000) {
+                    actual.text("highlight-management-export-result") == url && actual.text("highlight-management-export-summary") == summary
+                }
+            } catch (timeout: ComposeTimeoutException) {
+                var native = "not sampled"
+                instrumentation.runOnMainSync {
+                    val monitor = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                    val stages = listOf(
+                        androidx.test.runner.lifecycle.Stage.RESUMED,
+                        androidx.test.runner.lifecycle.Stage.STARTED,
+                        androidx.test.runner.lifecycle.Stage.PAUSED,
+                        androidx.test.runner.lifecycle.Stage.STOPPED,
+                    )
+                    val activities = stages.flatMap { monitor.getActivitiesInStage(it) }
+                    val manager = activities.filterIsInstance<HighlightRuleActivity>().firstOrNull()
+                    val management = manager?.viewModel?.state?.value
+                    val chooser = activities.filterIsInstance<HandleFileActivity>().firstOrNull()
+                    val choice = chooser?.choicesModel?.state?.value
+                    native = "managerPresent=${manager != null},managerLifecycle=${manager?.lifecycle?.currentState}," +
+                        "managerBusy=${management?.busy},managerErrorPresent=${management?.error != null}," +
+                        "exporting=${management?.draft?.exporting != null},resultPresent=${management?.draft?.exportResult != null}," +
+                        "resultEquals=${management?.draft?.exportResult == url}," +
+                        "choicePresent=${choice != null},choiceLifecycle=${chooser?.lifecycle?.currentState},choicePhase=${choice?.phase},choiceLoaded=${choice?.loaded}," +
+                        "choiceBusy=${choice?.busy},choiceResultPresent=${choice?.result != null},choiceResultEquals=${choice?.result == url}," +
+                        "choiceIssuePresent=${choice?.issue != null},choiceErrorPresent=${choice?.error != null}"
+                }
+                throw AssertionError(
+                    "Actual export URL/summary receipt within original shared 15s Compose wait; " +
+                        "uploadCaptured=${uploaded.get() != null},uploadedNameEquals=${uploadedName.get() == "HighlightRules.json"}," +
+                        "expectedUrlLength=${url.length},expectedSummaryLength=${summary.length},native=[$native]," +
+                        "actualUrl=[${actual.diagnostic("highlight-management-export-result", url)}]," +
+                        "actualSummary=[${actual.diagnostic("highlight-management-export-summary", summary)}]",
+                    timeout,
+                )
             }
             assertEquals(url, actual.text("highlight-management-export-result"))
             assertEquals(summary, actual.text("highlight-management-export-summary"))
