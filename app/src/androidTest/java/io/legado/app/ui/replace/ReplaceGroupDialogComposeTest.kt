@@ -1,10 +1,9 @@
 package io.legado.app.ui.replace
 
-import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
+import io.legado.app.ui.group.NamedGroupsFlutterRobot
 import io.legado.app.ui.about.AboutActivity
 import io.legado.app.utils.GSON
 import java.util.UUID
@@ -14,7 +13,6 @@ import org.junit.*
 import org.junit.Assert.*
 
 class ReplaceGroupDialogComposeTest {
-    @get:Rule val compose = createEmptyComposeRule()
 
     @Test
     fun realDialogRestoresRenameDraftAndPreservesUnrelatedMemberships() {
@@ -34,23 +32,19 @@ class ReplaceGroupDialogComposeTest {
                 scenario.onActivity {
                     GroupManageDialog().show(it.supportFragmentManager, "groups")
                 }
-                compose.waitUntil {
-                    compose
-                        .onAllNodesWithTag("named-group-edit-$group")
-                        .fetchSemanticsNodes()
-                        .isNotEmpty()
-                }
-                compose.onNodeWithTag("named-group-edit-$group").performScrollTo().performClick()
-                compose.onNodeWithTag("named-group-name").performTextReplacement("Renamed")
-                scenario.recreate()
-                compose.waitUntil {
-                    compose.onAllNodesWithTag("named-group-name").fetchSemanticsNodes().isNotEmpty()
-                }
-                compose.onNodeWithTag("named-group-name").assertTextEquals("Renamed")
-                compose.onNodeWithTag("named-group-confirm").performClick()
-                compose.waitUntil {
-                    runBlocking(Dispatchers.IO) {
-                        appDb.replaceRuleDao.findById(original.id)?.group == "Other,Renamed"
+                NamedGroupsFlutterRobot(scenario).use { robot ->
+                    robot.ready()
+                    robot.edit(group)
+                    robot.input("Renamed")
+                    robot.select(2, 5)
+                    scenario.recreate()
+                    robot.assertName("Renamed")
+                    robot.assertSelection(2, 5)
+                    robot.click("named-group-confirm")
+                    robot.awaitOriginalRoomReceipt {
+                        runBlocking(Dispatchers.IO) {
+                            appDb.replaceRuleDao.findById(original.id)?.group == "Other,Renamed"
+                        }
                     }
                 }
                 runBlocking(Dispatchers.IO) {
