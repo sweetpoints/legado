@@ -32,6 +32,9 @@ internal data class HighlightRuleEditorState(
     val finished: Boolean = false,
     val event: HighlightRuleEditorEvent? = null,
     val color: HighlightRuleColorDraft? = null,
+    val focus: String? = null,
+    val scroll: Int = 0,
+    val selections: Map<String, Pair<Int, Int>> = emptyMap(),
 )
 
 internal class HighlightRuleEditorViewModel(
@@ -46,6 +49,11 @@ internal class HighlightRuleEditorViewModel(
         MutableStateFlow(
             HighlightRuleEditorState(
                 finished = saved["finished"] ?: false,
+                focus = saved.get<String>("editorFocus")?.takeIf { it in FIELDS },
+                scroll = saved["editorScroll"] ?: 0,
+                selections = FIELDS.associateWith { key ->
+                    (saved.get<Int>("${key}Start") ?: 0) to (saved.get<Int>("${key}End") ?: 0)
+                },
                 event =
                     saved.get<String>("event")?.let {
                         runCatching { HighlightRuleEditorEvent.valueOf(it) }.getOrNull()
@@ -116,6 +124,35 @@ internal class HighlightRuleEditorViewModel(
         mutable.value =
             value.copy(draft = draft.copy(rule = rule, revision = draft.revision + 1), error = null)
         scheduleWrite()
+    }
+
+    fun field(key: String, text: String, start: Int, end: Int) {
+        require(key in FIELDS && start in 0..text.length && end in 0..text.length)
+        check(!state.value.loading && !state.value.saving && !state.value.finished && state.value.draft != null)
+        change { rule -> when (key) {
+            "name" -> rule.copy(name = text)
+            "group" -> rule.copy(group = text)
+            "pattern" -> rule.copy(pattern = text)
+            "scope" -> rule.copy(scope = text)
+            else -> error("Unknown field")
+        } }
+        saved["${key}Start"] = start
+        saved["${key}End"] = end
+        saved["editorFocus"] = key
+        mutable.value = state.value.copy(focus = key, selections = state.value.selections + (key to (start to end)))
+    }
+
+    fun scroll(offset: Int) {
+        if (state.value.loading || state.value.saving || state.value.finished) return
+        saved["editorScroll"] = offset.coerceAtLeast(0)
+        mutable.value = state.value.copy(scroll = offset.coerceAtLeast(0))
+    }
+
+    fun focus(key: String) {
+        require(key in FIELDS)
+        if (state.value.loading || state.value.saving || state.value.finished) return
+        saved["editorFocus"] = key
+        mutable.value = state.value.copy(focus = key)
     }
 
     fun style(style: HighlightStyle) = change { it.copy(style = style.normalized()) }
@@ -201,6 +238,8 @@ internal class HighlightRuleEditorViewModel(
         saved.remove<Boolean>("colorAlpha")
         mutable.value = state.value.copy(color = null)
     }
+
+    companion object { val FIELDS = listOf("name", "group", "pattern", "scope") }
 
     private fun event(value: HighlightRuleEditorEvent) {
         saved["event"] = value.name
