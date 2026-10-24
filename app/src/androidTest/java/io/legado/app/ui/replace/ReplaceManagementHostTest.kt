@@ -4,7 +4,10 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.os.Parcel
+import android.os.Build
 import android.os.SystemClock
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import android.view.KeyEvent
 import org.junit.After
 import androidx.test.core.app.ActivityScenario
@@ -94,9 +97,33 @@ class ReplaceManagementHostTest {
                 // A hardware Back cancels only the Flutter modal; the next Back returns RESULT_OK.
                 scenario.onActivity { it.managementModel.dialog(ReplaceManagementDialog.AddGroup) }
                 driver.awaitIdentifier("replace-rule-dialog-field")
+                val transitionDeadline = SystemClock.uptimeMillis() + 10000
                 instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-                await10 { model!!.state.value.dialog == null }
-                scenario.onActivity { assertTrue(!it.isFinishing) }
+                await10 {
+                    val field = driver.node("replace-rule-dialog-field")
+                    val back = driver.node("replace-rule-back")
+                    val rendered = field == null && back != null
+                    field?.recycle(); back?.recycle()
+                    model!!.state.value.dialog == null && rendered
+                }
+                val frame = CountDownLatch(1)
+                val committed = Runnable { frame.countDown() }
+                scenario.onActivity {
+                    assertTrue(!it.isFinishing)
+                    val decor = it.window.decorView
+                    if (Build.VERSION.SDK_INT >= 29) {
+                        decor.viewTreeObserver.registerFrameCommitCallback(committed)
+                        decor.postInvalidateOnAnimation()
+                    } else decor.postOnAnimation { decor.post(committed) }
+                }
+                try {
+                    assertTrue("Modal dismissal frame within original 10s transition deadline",
+                        frame.await((transitionDeadline - SystemClock.uptimeMillis()).coerceAtLeast(0), TimeUnit.MILLISECONDS))
+                } finally {
+                    if (Build.VERSION.SDK_INT >= 29) scenario.onActivity {
+                        it.window.decorView.viewTreeObserver.unregisterFrameCommitCallback(committed)
+                    }
+                }
                 instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
                 assertEquals(Activity.RESULT_OK, scenario.result.resultCode)
             }
