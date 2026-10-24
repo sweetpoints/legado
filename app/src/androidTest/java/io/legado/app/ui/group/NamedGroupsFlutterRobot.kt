@@ -1,6 +1,16 @@
 package io.legado.app.ui.group
 
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.graphics.Bitmap
+import android.graphics.Rect
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.view.PixelCopy
+import android.view.View
+import android.view.ViewGroup
+import android.view.Window
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -9,6 +19,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.ui.about.AboutActivity
 import io.legado.app.ui.flutter.FlutterUiTestDriver
 import org.junit.Assert.*
+import io.flutter.embedding.android.FlutterView
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.ArrayDeque
 
 /** Normal dialogs and real advertised Android accessibility actions; no test channel. */
@@ -174,9 +191,188 @@ internal class NamedGroupsFlutterRobot(private val scenario: ActivityScenario<Ab
                 nativeEquals && actualEquals
             }
         } catch (failure: AssertionError) {
-            // Only scalar observations: never include group names or draft contents in logs.
-            throw AssertionError("${failure.message}; $diagnostic", failure)
+            // This assertion has already failed. Capturing evidence must not retry or turn it green.
+            val originalFailure = AssertionError("${failure.message}; $diagnostic", failure)
+            val evidence = try { captureNameFailure() }
+                catch (captureFailure: Exception) { "captureError=${captureFailure.javaClass.simpleName}" }
+            originalFailure.addSuppressed(AssertionError("Named group failure evidence: $evidence"))
+            throw originalFailure
         }
     }
+    /** Failure-only observations, taken before interactive-window flags can change semantics. */
+    @Suppress("DEPRECATION")
+    private fun captureNameFailure(): String {
+        val stamp = SystemClock.uptimeMillis()
+        val directory = File(instrumentation.targetContext.cacheDir, "named-group-failure")
+        check(directory.isDirectory || directory.mkdirs())
+        val report = JSONObject().put("failureObservedUptime", stamp)
+        var window: Window? = null
+        var decor: View? = null
+        try {
+            scenario.onActivity { activity ->
+                val host = activity.supportFragmentManager.fragments.filterIsInstance<NamedGroupDialog>().singleOrNull()
+                window = host?.dialog?.window
+                decor = window?.decorView
+                val attributes = window?.attributes
+                report.put("ownedWindow", JSONObject()
+                    .put("type", attributes?.type ?: JSONObject.NULL)
+                    .put("flags", attributes?.flags ?: JSONObject.NULL)
+                    .put("softInputMode", attributes?.softInputMode ?: JSONObject.NULL)
+                    .put("nativeViews", nativeViewTree(decor)))
+            }
+        } catch (failure: Exception) { report.put("nativeCaptureError", failure.javaClass.simpleName) }
+        val automation = instrumentation.uiAutomation
+        val originalFlags = automation.serviceInfo.flags
+        report.put("originalServiceFlags", originalFlags)
+        try { report.put("originalActiveRoot", accessibilityTree(automation.rootInActiveWindow)) }
+        catch (failure: Exception) { report.put("activeRootError", failure.javaClass.simpleName) }
+        // PixelCopy reads the owned window surface. Do not call View.draw/requestLayout or hide IME.
+        report.put("screenshot", copyOwnedWindow(window, decor, File(directory, "$stamp.png")))
+        try {
+            if (originalFlags and AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS == 0) {
+                automation.serviceInfo = automation.serviceInfo.apply {
+                    flags = originalFlags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                }
+            }
+            report.put("windowsCapturedUptime", SystemClock.uptimeMillis())
+            val windows = automation.windows
+            val values = JSONArray()
+            try {
+                windows.take(12).forEach { info ->
+                    val bounds = Rect(); info.getBoundsInScreen(bounds)
+                    val value = JSONObject().put("id", info.id).put("type", info.type)
+                        .put("active", info.isActive).put("focused", info.isFocused)
+                        .put("accessibilityFocused", info.isAccessibilityFocused).put("layer", info.layer)
+                        .put("bounds", rectangle(bounds))
+                    try { value.put("tree", accessibilityTree(info.root)) }
+                    catch (failure: Exception) { value.put("rootError", failure.javaClass.simpleName) }
+                    values.put(value)
+                }
+                report.put("availableWindowCount", windows.size)
+                report.put("windowsTruncated", windows.size > 12)
+                report.put("windows", values)
+            } finally { windows.forEach { it.recycle() } }
+        } catch (failure: Exception) { report.put("windowsError", failure.javaClass.simpleName) }
+        finally {
+            try { automation.serviceInfo = automation.serviceInfo.apply { flags = originalFlags } }
+            catch (failure: Exception) { report.put("serviceFlagsRestoreError", failure.javaClass.simpleName) }
+            val restoredFlags = runCatching { automation.serviceInfo.flags }.getOrNull()
+            report.put("restoredServiceFlags", restoredFlags ?: JSONObject.NULL)
+            report.put("serviceFlagsRestored", restoredFlags == originalFlags)
+            report.put("captureFinishedUptime", SystemClock.uptimeMillis())
+            File(directory, "$stamp.json").writeText(report.toString(2))
+        }
+        return "cache/named-group-failure/$stamp.json; screenshot=" +
+            (report.getJSONObject("screenshot").optString("file", "not-created"))
+    }
+
+    private fun copyOwnedWindow(window: Window?, decor: View?, file: File): JSONObject {
+        val result = JSONObject().put("requestedUptime", SystemClock.uptimeMillis())
+        val width = decor?.width ?: 0; val height = decor?.height ?: 0
+        if (window == null || width <= 0 || height <= 0 || width.toLong() * height > 8_388_608L) {
+            return result.put("skipped", "owned_surface_unavailable_or_exceeds_pixel_bound")
+        }
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val completed = CountDownLatch(1)
+        val status = AtomicInteger(-1)
+        var finished = false
+        try {
+            instrumentation.runOnMainSync {
+                try {
+                    PixelCopy.request(window, bitmap, { code -> status.set(code); completed.countDown() }, Handler(Looper.getMainLooper()))
+                } catch (_: Exception) { status.set(-2); completed.countDown() }
+            }
+            // This bounded wait happens only after the unchanged original assertion has failed.
+            finished = completed.await(2, TimeUnit.SECONDS)
+            result.put("callbackCompleted", finished).put("resultCode", status.get())
+                .put("width", width).put("height", height).put("completedUptime", SystemClock.uptimeMillis())
+            if (finished && status.get() == PixelCopy.SUCCESS) {
+                file.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+                result.put("file", "cache/named-group-failure/${file.name}").put("bytes", file.length())
+            }
+        } catch (failure: Exception) { result.put("error", failure.javaClass.simpleName) }
+        finally { if (finished) bitmap.recycle() }
+        return result
+    }
+
+    private fun nativeViewTree(root: View?): JSONObject {
+        val result = JSONObject().put("capturedUptime", SystemClock.uptimeMillis())
+        val values = JSONArray()
+        val pending = ArrayDeque<Pair<View, Int>>()
+        root?.let { pending.add(it to -1) }
+        while (pending.isNotEmpty() && values.length() < 128) {
+            val (view, parent) = pending.removeFirst()
+            val index = values.length()
+            val location = IntArray(2); view.getLocationOnScreen(location)
+            val visible = Rect(); val visibleResult = view.getGlobalVisibleRect(visible)
+            val insets = ViewCompat.getRootWindowInsets(view)
+            val value = JSONObject().put("parent", parent).put("class", view.javaClass.name)
+                .put("id", if (view.id == View.NO_ID) "none" else runCatching { view.resources.getResourceName(view.id) }.getOrDefault("unresolved"))
+                .put("size", JSONArray(listOf(view.width, view.height))).put("screenLocation", JSONArray(location.toList()))
+                .put("globalVisible", visibleResult).put("globalVisibleBounds", rectangle(visible))
+                .put("attached", view.isAttachedToWindow).put("laidOut", view.isLaidOut)
+                .put("shown", view.isShown).put("visibility", view.visibility).put("focused", view.hasFocus())
+                .put("children", if (view is ViewGroup) view.childCount else 0)
+                .put("childrenTruncated", view is ViewGroup && view.childCount > 32)
+                .put("windowFocused", view.hasWindowFocus()).put("lastDrawUptime", view.drawingTime)
+                .put("imeVisible", insets?.isVisible(WindowInsetsCompat.Type.ime()) ?: JSONObject.NULL)
+                .put("imeBottom", insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: JSONObject.NULL)
+            if (view is FlutterView) {
+                val metrics = view.viewportMetrics
+                value.put("flutterEngineAttached", view.isAttachedToFlutterEngine)
+                    .put("flutterDisplayingUi", view.attachedFlutterEngine?.renderer?.isDisplayingFlutterUi ?: JSONObject.NULL)
+                    .put("viewport", JSONObject().put("dpr", metrics.devicePixelRatio.toDouble())
+                        .put("width", metrics.width).put("height", metrics.height)
+                        .put("insetTop", metrics.viewInsetTop).put("insetBottom", metrics.viewInsetBottom)
+                        .put("insetLeft", metrics.viewInsetLeft).put("insetRight", metrics.viewInsetRight)
+                        .put("paddingTop", metrics.viewPaddingTop).put("paddingBottom", metrics.viewPaddingBottom)
+                        .put("paddingLeft", metrics.viewPaddingLeft).put("paddingRight", metrics.viewPaddingRight))
+            }
+            values.put(value)
+            if (view is ViewGroup) {
+                for (child in 0 until minOf(view.childCount, 32)) pending.add(view.getChildAt(child) to index)
+            }
+        }
+        return result.put("nodes", values).put("truncated", pending.isNotEmpty())
+    }
+
+    @Suppress("DEPRECATION")
+    private fun accessibilityTree(root: AccessibilityNodeInfo?): JSONObject {
+        val result = JSONObject().put("capturedUptime", SystemClock.uptimeMillis())
+            .put("rootPackage", root?.packageName?.toString() ?: JSONObject.NULL)
+        val values = JSONArray()
+        val pending = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
+        root?.let { pending.add(it to -1) }
+        try {
+            while (pending.isNotEmpty() && values.length() < 256) {
+                val (node, parent) = pending.removeFirst()
+                try {
+                    val bounds = Rect(); node.getBoundsInScreen(bounds)
+                    val id = node.viewIdResourceName
+                    val safeId = if (id == null || id in setOf("named-group-add", "named-group-close", "named-group-backdrop",
+                            "named-group-list", "named-group-done", "named-group-name", "named-group-error", "named-group-retry",
+                            "named-group-cancel", "named-group-confirm") ||
+                            id.matches(Regex("named-group-(edit|delete)-[a-f0-9]{64}")) ||
+                            id.matches(Regex("[a-zA-Z0-9_.]+:id/[a-zA-Z0-9_]+"))) id
+                        else "other-identifier-length=${id.length}"
+                    val index = values.length()
+                    values.put(JSONObject().put("parent", parent).put("class", node.className?.toString() ?: JSONObject.NULL)
+                        .put("package", node.packageName?.toString() ?: JSONObject.NULL).put("id", safeId ?: JSONObject.NULL)
+                        .put("windowId", node.windowId).put("bounds", rectangle(bounds)).put("children", node.childCount)
+                        .put("childrenTruncated", node.childCount > 32)
+                        .put("visible", node.isVisibleToUser).put("enabled", node.isEnabled).put("focused", node.isFocused)
+                        .put("accessibilityFocused", node.isAccessibilityFocused).put("editable", node.isEditable)
+                        .put("textLength", node.text?.length ?: -1).put("descriptionLength", node.contentDescription?.length ?: -1)
+                        .put("selectionStart", node.textSelectionStart).put("selectionEnd", node.textSelectionEnd)
+                        .put("actionIds", JSONArray(node.actionList.take(32).map { it.id })))
+                    for (child in 0 until minOf(node.childCount, 32)) node.getChild(child)?.let { pending.add(it to index) }
+                } finally { node.recycle() }
+            }
+            result.put("nodes", values).put("truncated", pending.isNotEmpty())
+        } finally { pending.forEach { it.first.recycle() } }
+        return result
+    }
+
+    private fun rectangle(rect: Rect) = JSONArray(listOf(rect.left, rect.top, rect.right, rect.bottom))
     override fun close() { driver.close() }
 }
