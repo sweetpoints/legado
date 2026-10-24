@@ -412,6 +412,85 @@ class SourceOrderMetadataUpdateTest {
                     }
                     return ready
                 }
+                val switchIdentifier = "replace-rule-enabled-${stale[0].id}"
+                val rowIdentifier = "replace-rule-row-${stale[0].id}"
+                val expectedVisibleIds = listOf(stale[1].id, stale[2].id, stale[0].id)
+                fun popupActions(): List<String> {
+                    val pending = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+                    instrumentation.uiAutomation.rootInActiveWindow?.let(pending::add)
+                    val found = mutableListOf<String>()
+                    while (pending.isNotEmpty()) {
+                        val node = pending.removeFirst()
+                        try {
+                            if (!node.refresh()) continue
+                            val id = node.viewIdResourceName.orEmpty()
+                            if (node.isVisibleToUser && id.startsWith("replace-rule-action:")) {
+                                val action = id.removePrefix("replace-rule-action:").substringBefore(':')
+                                found += action.takeIf { it in setOf("up", "down", "top", "bottom", "delete", "enable", "disable", "share", "export") } ?: "other"
+                            }
+                            for (index in 0 until node.childCount) node.getChild(index)?.let(pending::add)
+                        } finally { node.recycle() }
+                    }
+                    return found
+                }
+                fun freshSwitch(): android.view.accessibility.AccessibilityNodeInfo? {
+                    val root = ui.driver.node(switchIdentifier) ?: return null
+                    if (!root.refresh() || root.viewIdResourceName != switchIdentifier) {
+                        root.recycle(); return null
+                    }
+                    val pending = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+                    pending.add(root)
+                    while (pending.isNotEmpty()) {
+                        val node = pending.removeFirst()
+                        if (!node.refresh()) { node.recycle(); continue }
+                        val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+                        var correctControl = false
+                        var correctRow = false
+                        var foreignIdentity = false
+                        var ancestor: android.view.accessibility.AccessibilityNodeInfo? = android.view.accessibility.AccessibilityNodeInfo.obtain(node)
+                        while (ancestor != null) {
+                            val current = ancestor
+                            if (!current.refresh()) { current.recycle(); foreignIdentity = true; break }
+                            val id = current.viewIdResourceName.orEmpty()
+                            if (id == switchIdentifier) correctControl = true
+                            if (id == rowIdentifier) correctRow = true
+                            if ((id.startsWith("replace-rule-enabled-") && id != switchIdentifier) ||
+                                (id.startsWith("replace-rule-row-") && id != rowIdentifier)) foreignIdentity = true
+                            ancestor = current.parent
+                            current.recycle()
+                        }
+                        val actualRow = ui.driver.node(rowIdentifier)
+                        val rowBounds = actualRow?.takeIf { it.refresh() && it.viewIdResourceName == rowIdentifier }
+                            ?.let { android.graphics.Rect().also(it::getBoundsInScreen) }
+                        actualRow?.recycle()
+                        val matches = correctControl && correctRow && !foreignIdentity &&
+                            node.className == "android.widget.Switch" && node.isVisibleToUser &&
+                            node.isCheckable && !node.isChecked && node.isEnabled && node.isClickable &&
+                            node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK } &&
+                            bounds.width() > 0 && bounds.height() > 0 && rowBounds?.contains(bounds) == true
+                        if (matches) {
+                            pending.forEach { it.recycle() }
+                            return node
+                        }
+                        for (index in 0 until node.childCount) node.getChild(index)?.let(pending::add)
+                        node.recycle()
+                    }
+                    return null
+                }
+                fun currentGeometry(): List<android.graphics.Rect>? {
+                    val bounds = expectedVisibleIds.map { id ->
+                        val identifier = "replace-rule-row-$id"
+                        val node = ui.driver.node(identifier) ?: return null
+                        try {
+                            if (!node.refresh() || node.viewIdResourceName != identifier) return null
+                            android.graphics.Rect().also(node::getBoundsInScreen)
+                        } finally { node.recycle() }
+                    }
+                    if (bounds.any { it.height() <= 0 } || bounds.zipWithNext().any { (first, next) -> first.centerY() >= next.centerY() }) return null
+                    val node = freshSwitch() ?: return null
+                    try { return bounds + android.graphics.Rect().also(node::getBoundsInScreen) }
+                    finally { node.recycle() }
+                }
                 fun switchSnapshot(): String {
                     val room = appDb.replaceRuleDao.findById(stale[0].id)
                     val expected = committed.first { it.id == stale[0].id }
@@ -430,6 +509,8 @@ class SourceOrderMetadataUpdateTest {
                             "rowCount=${state.rows.size} rowIndex=${state.rows.indexOfFirst { it.id == stale[0].id }} " +
                             "rowPresent=${row != null} rowEnabled=${row?.enabled} rowOrder=${row?.order} " +
                             "observedPresent=${observed != null} observedEnabled=${observed?.enabled} " +
+                            "fixtureNativeEnabled=${stale.map { fixture -> state.rows.firstOrNull { it.id == fixture.id }?.enabled }} " +
+                            "visibleFixtureOrder=${state.rows.map { row -> stale.indexOfFirst { it.id == row.id } }} " +
                             "selectedTarget=${stale[0].id in state.selected} queryMatches=${state.query == "group:$group"} " +
                             "windowFocus=${activity.window.decorView.hasWindowFocus()} lifecycle=${activity.lifecycle.currentState} " +
                             "imeBottom=${insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())?.bottom}"
@@ -440,29 +521,86 @@ class SourceOrderMetadataUpdateTest {
                     while (nodes.isNotEmpty()) {
                         val node = nodes.removeFirst()
                         try {
+                            val refreshed = node.refresh()
                             val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
-                            rendered += "checkable=${node.isCheckable} checked=${node.isChecked} " +
+                            rendered += "refreshed=$refreshed identityMatches=${node.viewIdResourceName == switchIdentifier} " +
+                                "runtimeIdentity=${node.hashCode()} window=${node.windowId} role=${node.className} checkable=${node.isCheckable} checked=${node.isChecked} " +
                                 "enabled=${node.isEnabled} clickable=${node.isClickable} visible=${node.isVisibleToUser} " +
                                 "focused=${node.isFocused} bounds=$bounds actions=${node.actionList.map { it.id }}"
                             for (index in 0 until node.childCount) node.getChild(index)?.let(nodes::add)
                         } finally { node.recycle() }
                     }
-                    // Failure-only scalars: never record names, IDs, query text, patterns, or JSON.
+                    // Failure-only scalars: runtime node hashes only; no names, business IDs, query text, patterns, or JSON.
                     return "roomPresent=${room != null} roomEnabled=${room?.isEnabled} roomOrder=${room?.order} " +
-                        "expectedOrder=${expected.order} metadataMatches=$metadataMatches $native nodes=$rendered"
+                        "expectedOrder=${expected.order} metadataMatches=$metadataMatches " +
+                        "fixtureRoomEnabled=${stale.map { appDb.replaceRuleDao.findById(it.id)?.isEnabled }} " +
+                        "popupActions=${popupActions()} $native nodes=$rendered"
                 }
                 var switchActionAccepted = false
-                var switchPhase = "single-click"
+                var switchPhase = "single-click-readiness"
+                var actionIdentity = "not dispatched"
                 try {
-                    waitUntil("actual replacement switch ready and clicked once") {
-                        readyForMutation() && ui.actual("replace-rule-enabled-${stale[0].id}") { node ->
-                            node.isCheckable && !node.isChecked && node.isEnabled && node.isClickable &&
-                                node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK } &&
-                                node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK).also {
-                                    if (it) switchActionAccepted = true
-                                }
+                    // All readiness, committed-frame ACK and the single action share the original 15s budget.
+                    val actionDeadline = android.os.SystemClock.uptimeMillis() + 15_000
+                    fun withinActionDeadline(description: String, condition: () -> Boolean) {
+                        val remaining = actionDeadline - android.os.SystemClock.uptimeMillis()
+                        check(remaining > 0) { "Original replacement single-action deadline expired" }
+                        try { compose.waitUntil(timeoutMillis = remaining, condition = condition) }
+                        catch (_: androidx.compose.ui.test.ComposeTimeoutException) { error("Timed out waiting for $description") }
+                    }
+                    fun nativeOrderReady(): Boolean {
+                        var ready = false
+                        scenario.onActivity { activity ->
+                            val state = activity.managementModel.state.value
+                            val insets = androidx.core.view.ViewCompat.getRootWindowInsets(activity.window.decorView)
+                            ready = state.loaded && !state.busy && state.pending == null && state.dragging == null &&
+                                state.rows.map { it.id } == expectedVisibleIds &&
+                                activity.window.decorView.hasWindowFocus() && insets != null &&
+                                insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom == 0
+                        }
+                        return ready
+                    }
+                    var previous: List<android.graphics.Rect>? = null
+                    withinActionDeadline("fresh replacement identity and committed order") {
+                        val geometry = if (nativeOrderReady() && popupActions().isEmpty()) currentGeometry() else null
+                        val stable = geometry != null && geometry == previous
+                        previous = geometry
+                        stable
+                    }
+                    switchPhase = "single-click-frame"
+                    val frame = java.util.concurrent.CountDownLatch(1)
+                    val committedFrame = Runnable { frame.countDown() }
+                    scenario.onActivity { activity ->
+                        val decor = activity.window.decorView
+                        if (android.os.Build.VERSION.SDK_INT >= 29) {
+                            decor.viewTreeObserver.registerFrameCommitCallback(committedFrame)
+                            decor.postInvalidateOnAnimation()
+                        } else decor.postOnAnimation { decor.post(committedFrame) }
+                    }
+                    try {
+                        check(frame.await((actionDeadline - android.os.SystemClock.uptimeMillis()).coerceAtLeast(0), java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                            "Replacement frame ACK exceeded original single-action deadline"
+                        }
+                    } finally {
+                        if (android.os.Build.VERSION.SDK_INT >= 29) scenario.onActivity {
+                            it.window.decorView.viewTreeObserver.unregisterFrameCommitCallback(committedFrame)
                         }
                     }
+                    switchPhase = "single-click-fresh-dispatch"
+                    withinActionDeadline("fresh replacement switch after committed frame") {
+                        nativeOrderReady() && popupActions().isEmpty() && freshSwitch()?.let { it.recycle(); true } == true
+                    }
+                    // Never retain a pre-frame node, never fall back to an ancestor, never repeat the action.
+                    val node = checkNotNull(freshSwitch()) { "Replacement switch identity changed before dispatch" }
+                    try {
+                        val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+                        actionIdentity = "validatedControlAndRow=true identifierMatches=${node.viewIdResourceName == switchIdentifier} " +
+                            "runtimeIdentity=${node.hashCode()} window=${node.windowId} role=${node.className} bounds=$bounds " +
+                            "checkable=${node.isCheckable} checked=${node.isChecked} enabled=${node.isEnabled} actions=${node.actionList.map { it.id }}"
+                        check(android.os.SystemClock.uptimeMillis() <= actionDeadline) { "Original replacement single-action deadline expired before dispatch" }
+                        switchActionAccepted = node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+                        check(switchActionAccepted) { "Actual replacement switch rejected its single action" }
+                    } finally { node.recycle() }
                     switchPhase = "enabled-receipt"
                     waitUntil("replacement switch enabled") {
                         appDb.replaceRuleDao.findById(stale[0].id)?.isEnabled == true &&
@@ -472,7 +610,7 @@ class SourceOrderMetadataUpdateTest {
                     val snapshot = runCatching { switchSnapshot() }.getOrElse {
                         "snapshotFailure=${it.javaClass.simpleName}"
                     }
-                    android.util.Log.e("ReplaceOrderSwitch", "phase=$switchPhase clickAccepted=$switchActionAccepted $snapshot")
+                    android.util.Log.e("ReplaceOrderSwitch", "phase=$switchPhase clickAccepted=$switchActionAccepted beforeAction=[$actionIdentity] $snapshot")
                     throw failure
                 }
                 assertState(setOf(stale[0].id))
