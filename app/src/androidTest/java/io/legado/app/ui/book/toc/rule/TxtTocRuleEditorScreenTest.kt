@@ -153,10 +153,40 @@ class TxtTocRuleEditorScreenTest {
         val window = android.graphics.Rect(); scenario.onActivity { dialog(it)!!.requireDialog().window!!.decorView.getGlobalVisibleRect(window) }
         assertTrue(backdrop.intersect(window)); assertTrue(toolbar.top > backdrop.top + 8)
         driver.touchDown(backdrop.exactCenterX(), (backdrop.top + toolbar.top) / 2f).close()
-        driver.click("txt-toc-editor-keep"); assertTrue(state { it.name == renamed && !it.confirmExit })
-        assertEquals(original, row()?.name)
-        closeSoftKeyboard()
-        driver.await("Owned dialog IME hidden before actual Android Back") {
+        driver.click("txt-toc-editor-keep")
+        // Keep enables the text field again and restores Flutter focus on its next frame.
+        // A hide sent before that frame can be followed by the restored field's IME show.
+        val deadline = SystemClock.uptimeMillis() + 30_000
+        var hideRequested = false
+        driver.await("Keep ACK and owned dialog IME hidden before actual Android Back") {
+            if (SystemClock.uptimeMillis() >= deadline) return@await false
+            if (!state { it.name == renamed && !it.confirmExit && it.focused == TxtTocEditorField.Name }) return@await false
+            val field = driver.node("txt-toc-editor-Name") ?: return@await false
+            val restored = try { field.isEnabled && field.isFocused && field.text?.toString() == renamed } finally { field.recycle() }
+            if (!restored) return@await false
+            if (!hideRequested) {
+                val frame = java.util.concurrent.CountDownLatch(1)
+                val callback = Runnable { frame.countDown() }
+                scenario.onActivity {
+                    val decor = dialog(it)!!.requireDialog().window!!.decorView
+                    decor.viewTreeObserver.registerFrameCommitCallback(callback)
+                    decor.postInvalidateOnAnimation()
+                }
+                val committed = try {
+                    val remaining = deadline - SystemClock.uptimeMillis()
+                    remaining > 0 && frame.await(remaining, java.util.concurrent.TimeUnit.MILLISECONDS)
+                } finally {
+                    scenario.onActivity { dialog(it)!!.requireDialog().window!!.decorView.viewTreeObserver.unregisterFrameCommitCallback(callback) }
+                }
+                if (!committed) return@await false
+                instrumentation.waitForIdleSync()
+                scenario.onActivity {
+                    val window = dialog(it)!!.requireDialog().window!!
+                    androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+                        .hide(androidx.core.view.WindowInsetsCompat.Type.ime())
+                }
+                hideRequested = true
+            }
             var hidden = false
             scenario.onActivity {
                 hidden = androidx.core.view.ViewCompat.getRootWindowInsets(dialog(it)!!.requireDialog().window!!.decorView)
@@ -164,6 +194,7 @@ class TxtTocRuleEditorScreenTest {
             }
             hidden
         }
+        assertEquals(original, row()?.name)
         androidx.test.espresso.Espresso.pressBack()
         driver.awaitIdentifier("txt-toc-editor-discard")
         scenario.onActivity { assertFalse("Native Back must not close the parent Activity", it.isFinishing) }

@@ -104,7 +104,16 @@ class DictionaryRuleEditScreenTest {
         assertTrue("Backdrop has a real exposed area above the card", toolbar.top > backdrop.top + 8)
         driver.touchDown(backdrop.exactCenterX(), (backdrop.top + toolbar.top) / 2f).close()
         driver.click("dictionary-rule-keep")
-        assertTrue(state { it.name == renamed && !it.confirmExit })
+        // Accessibility ACTION_CLICK acknowledges dispatch, not the native bridge result.
+        driver.await("Keep preserves native and rendered dictionary draft after confirmation closes") {
+            if (!state { it.name == renamed && !it.confirmExit }) return@await false
+            val confirmation = driver.node("dictionary-rule-keep")
+            val dismissed = confirmation == null
+            confirmation?.recycle()
+            val field = driver.node("dictionary-rule-Name")
+            val intact = field?.let { try { it.isEnabled && it.text?.toString() == renamed } finally { it.recycle() } } ?: false
+            dismissed && intact
+        }
         assertEquals(original, row()?.name)
     }
     @Test fun discardClosesWithoutSaving() {
