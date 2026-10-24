@@ -412,16 +412,68 @@ class SourceOrderMetadataUpdateTest {
                     }
                     return ready
                 }
-                waitUntil("actual replacement switch ready and clicked once") {
-                    readyForMutation() && ui.actual("replace-rule-enabled-${stale[0].id}") { node ->
-                        node.isCheckable && !node.isChecked && node.isEnabled && node.isClickable &&
-                            node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK } &&
-                            node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+                fun switchSnapshot(): String {
+                    val room = appDb.replaceRuleDao.findById(stale[0].id)
+                    val expected = committed.first { it.id == stale[0].id }
+                    val metadataMatches = room?.let {
+                        GSON.toJson(it.copy(isEnabled = false)) == GSON.toJson(expected.copy(isEnabled = false))
                     }
+                    var native = "unavailable"
+                    scenario.onActivity { activity ->
+                        val state = activity.managementModel.state.value
+                        val row = state.rows.firstOrNull { it.id == stale[0].id }
+                        val observed = activity.managementModel.observedRows.firstOrNull { it.id == stale[0].id }
+                        val insets = androidx.core.view.ViewCompat.getRootWindowInsets(activity.window.decorView)
+                        native = "loaded=${state.loaded} busy=${state.busy} pending=${state.pending != null} " +
+                            "waitingNative=${state.waitingNative} error=${state.error != null} dialog=${state.dialog?.name} " +
+                            "dragging=${state.dragging != null} draggingTarget=${state.dragging == stale[0].id} " +
+                            "rowCount=${state.rows.size} rowIndex=${state.rows.indexOfFirst { it.id == stale[0].id }} " +
+                            "rowPresent=${row != null} rowEnabled=${row?.enabled} rowOrder=${row?.order} " +
+                            "observedPresent=${observed != null} observedEnabled=${observed?.enabled} " +
+                            "selectedTarget=${stale[0].id in state.selected} queryMatches=${state.query == "group:$group"} " +
+                            "windowFocus=${activity.window.decorView.hasWindowFocus()} lifecycle=${activity.lifecycle.currentState} " +
+                            "imeBottom=${insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())?.bottom}"
+                    }
+                    val nodes = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+                    ui.driver.node("replace-rule-enabled-${stale[0].id}")?.let(nodes::add)
+                    val rendered = mutableListOf<String>()
+                    while (nodes.isNotEmpty()) {
+                        val node = nodes.removeFirst()
+                        try {
+                            val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+                            rendered += "checkable=${node.isCheckable} checked=${node.isChecked} " +
+                                "enabled=${node.isEnabled} clickable=${node.isClickable} visible=${node.isVisibleToUser} " +
+                                "focused=${node.isFocused} bounds=$bounds actions=${node.actionList.map { it.id }}"
+                            for (index in 0 until node.childCount) node.getChild(index)?.let(nodes::add)
+                        } finally { node.recycle() }
+                    }
+                    // Failure-only scalars: never record names, IDs, query text, patterns, or JSON.
+                    return "roomPresent=${room != null} roomEnabled=${room?.isEnabled} roomOrder=${room?.order} " +
+                        "expectedOrder=${expected.order} metadataMatches=$metadataMatches $native nodes=$rendered"
                 }
-                waitUntil("replacement switch enabled") {
-                    appDb.replaceRuleDao.findById(stale[0].id)?.isEnabled == true &&
-                        readyForMutation() && ui.checked("replace-rule-enabled-${stale[0].id}", true)
+                var switchActionAccepted = false
+                var switchPhase = "single-click"
+                try {
+                    waitUntil("actual replacement switch ready and clicked once") {
+                        readyForMutation() && ui.actual("replace-rule-enabled-${stale[0].id}") { node ->
+                            node.isCheckable && !node.isChecked && node.isEnabled && node.isClickable &&
+                                node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK } &&
+                                node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK).also {
+                                    if (it) switchActionAccepted = true
+                                }
+                        }
+                    }
+                    switchPhase = "enabled-receipt"
+                    waitUntil("replacement switch enabled") {
+                        appDb.replaceRuleDao.findById(stale[0].id)?.isEnabled == true &&
+                            readyForMutation() && ui.checked("replace-rule-enabled-${stale[0].id}", true)
+                    }
+                } catch (failure: Throwable) {
+                    val snapshot = runCatching { switchSnapshot() }.getOrElse {
+                        "snapshotFailure=${it.javaClass.simpleName}"
+                    }
+                    android.util.Log.e("ReplaceOrderSwitch", "phase=$switchPhase clickAccepted=$switchActionAccepted $snapshot")
+                    throw failure
                 }
                 assertState(setOf(stale[0].id))
                 // Room commits before the model completes its mutation. The next user action
