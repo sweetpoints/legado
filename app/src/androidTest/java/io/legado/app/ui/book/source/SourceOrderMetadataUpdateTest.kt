@@ -1,8 +1,6 @@
 package io.legado.app.ui.book.source
 
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -10,6 +8,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.repository.rssSourceManagementId
+import io.legado.app.ui.replace.ReplaceManagerUiProbe
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.utils.GSON
@@ -293,6 +292,7 @@ class SourceOrderMetadataUpdateTest {
                 )
             }
         val keys = stale.map { it.id }.toSet()
+        val ui = ReplaceManagerUiProbe(instrumentation)
         try {
             appDb.replaceRuleDao.insert(*stale.toTypedArray())
             ActivityScenario.launch(ReplaceRuleActivity::class.java).use { scenario ->
@@ -309,20 +309,60 @@ class SourceOrderMetadataUpdateTest {
                     scenario.onActivity { loaded = it.managementModel.state.value.loaded }
                     loaded
                 }
-                scenario.onActivity { it.managementModel.query("group:$group") }
+                ui.click("replace-rule-search")
+                waitUntil("actual replacement query input") {
+                    val field = ui.driver.node("replace-rule-search") ?: return@waitUntil false
+                    try {
+                        field.isFocused && field.isEditable && field.isEnabled &&
+                            field.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } &&
+                            field.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
+                                putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "group:$group")
+                            })
+                    } finally { field.recycle() }
+                }
+                androidx.test.espresso.Espresso.closeSoftKeyboard()
                 waitUntil("replacement filter ready") {
                     var ready = false
                     scenario.onActivity {
                         ready =
                             it.managementModel.state.value.rows.map { row -> row.id } ==
-                                stale.map { row -> row.id }
+                                stale.map { row -> row.id } &&
+                                it.managementModel.state.value.query == "group:$group"
                     }
-                    ready
+                    ready && ui.driver.text("replace-rule-search") == "group:$group"
                 }
-                scenario.onActivity { activity ->
-                    activity.managementModel.beginDrag(stale[0].id)
-                    activity.managementModel.dragTo(stale[2].id, true)
-                    activity.managementModel.finishDrag()
+                val rowIds = stale.map { "replace-rule-row-${it.id}" }
+                var previousGeometry: List<android.graphics.Rect>? = null
+                waitUntil("actual replacement drag rows and hidden IME settled") {
+                    var imeHidden = false
+                    scenario.onActivity { activity ->
+                        val insets = androidx.core.view.ViewCompat.getRootWindowInsets(activity.window.decorView)
+                        imeHidden = insets != null && insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom == 0
+                    }
+                    val actual = rowIds.map { id -> ui.driver.node(id)?.let { node -> android.graphics.Rect().also { node.getBoundsInScreen(it); node.recycle() } } }
+                    if (actual.any { it == null }) return@waitUntil false
+                    val geometry = actual.map { checkNotNull(it) }
+                    val stable = geometry == previousGeometry
+                    previousGeometry = geometry
+                    imeHidden && stable && ui.actual("replace-rule-enabled-${stale[0].id}") { node ->
+                        node.isCheckable && node.isEnabled && node.isClickable &&
+                            node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK }
+                    }
+                }
+                fun bounds(id: String) = checkNotNull(ui.driver.node(id)).let { node ->
+                    android.graphics.Rect().also { node.getBoundsInScreen(it); node.recycle() }
+                }
+                val first = bounds(rowIds[0]); val last = bounds(rowIds[2])
+                val x = first.left + minOf(first.width() / 2f, 80 * instrumentation.targetContext.resources.displayMetrics.density)
+                ui.driver.touchDown(x, first.exactCenterY()).use { pointer ->
+                    pointer.hold(android.view.ViewConfiguration.getLongPressTimeout().toLong() + 150)
+                    pointer.moveTo(x, last.exactCenterY() + last.height() / 4f, 500)
+                    waitUntil("actual replacement held preview") {
+                        var preview = false
+                        scenario.onActivity { preview = it.managementModel.state.value.rows.map { row -> row.id } == listOf(stale[1].id, stale[2].id, stale[0].id) }
+                        val actual = rowIds.map { id -> ui.driver.node(id)?.let { node -> android.graphics.Rect().also { node.getBoundsInScreen(it); node.recycle() } } }
+                        preview && actual.all { it != null } && actual[1]!!.centerY() < actual[2]!!.centerY() && actual[2]!!.centerY() < actual[0]!!.centerY()
+                    }
                 }
                 waitUntil("replacement move committed") {
                     appDb.replaceRuleDao.all.map { it.id } == expectedOrder
@@ -364,7 +404,6 @@ class SourceOrderMetadataUpdateTest {
                     }
                     ready
                 }
-                compose.onNodeWithTag("replace-rule-enabled-${stale[0].id}").performClick()
                 fun readyForMutation(): Boolean {
                     var ready = false
                     scenario.onActivity {
@@ -373,31 +412,43 @@ class SourceOrderMetadataUpdateTest {
                     }
                     return ready
                 }
+                waitUntil("actual replacement switch ready and clicked once") {
+                    readyForMutation() && ui.actual("replace-rule-enabled-${stale[0].id}") { node ->
+                        node.isCheckable && !node.isChecked && node.isEnabled && node.isClickable &&
+                            node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK } &&
+                            node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+                    }
+                }
                 waitUntil("replacement switch enabled") {
                     appDb.replaceRuleDao.findById(stale[0].id)?.isEnabled == true &&
-                        readyForMutation()
+                        readyForMutation() && ui.checked("replace-rule-enabled-${stale[0].id}", true)
                 }
                 assertState(setOf(stale[0].id))
                 // Room commits before the model completes its mutation. The next user action
                 // must wait for the busy state to clear, or enabled() correctly ignores it.
-                scenario.onActivity {
-                    it.managementModel.enabled(stale.map { row -> row.id }, true)
+                ui.click("replace-rule-all")
+                waitUntil("actual selected replacement identities") {
+                    var selected = false
+                    scenario.onActivity { selected = it.managementModel.state.value.selected == keys }
+                    selected && stale.all { ui.checked("replace-rule-select-${it.id}", true) }
                 }
+                ui.click("replace-rule-selection-menu")
+                ui.click("replace-rule-action:enable")
                 waitUntil("replacement selection enabled") {
                     keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == true } &&
-                        readyForMutation()
+                        readyForMutation() && stale.all { ui.checked("replace-rule-enabled-${it.id}", true) }
                 }
                 assertState(keys)
-                scenario.onActivity {
-                    it.managementModel.enabled(stale.map { row -> row.id }, false)
-                }
+                ui.click("replace-rule-selection-menu")
+                ui.click("replace-rule-action:disable")
                 waitUntil("replacement selection disabled") {
                     keys.all { appDb.replaceRuleDao.findById(it)?.isEnabled == false } &&
-                        readyForMutation()
+                        readyForMutation() && stale.all { ui.checked("replace-rule-enabled-${it.id}", false) }
                 }
                 assertState(emptySet())
             }
         } finally {
+            ui.close()
             appDb.replaceRuleDao.delete(*stale.toTypedArray())
             val orders = before.associate { it.id to it.order }
             appDb.replaceRuleDao.update(
