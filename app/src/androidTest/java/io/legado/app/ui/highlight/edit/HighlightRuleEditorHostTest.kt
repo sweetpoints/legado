@@ -51,7 +51,7 @@ class HighlightRuleEditorHostTest {
             false
         }
     }
-    private fun actualSelection(id: String, start: Int, end: Int) {
+    private fun actualSelection(id: String, start: Int, end: Int, nativeSnapshot: () -> String) {
         driver.click(id)
         driver.await("actual selection action $id") {
             val node = driver.node(id) ?: return@await false
@@ -60,8 +60,27 @@ class HighlightRuleEditorHostTest {
                 putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, end)
             }) } finally { node.recycle() }
         }
-        driver.await("actual focused raw selection $id") {
-            driver.node(id)?.let { node -> try { node.isFocused && node.textSelectionStart == start && node.textSelectionEnd == end } finally { node.recycle() } } ?: false
+        var actualSnapshot = "node missing"
+        try {
+            driver.await("actual focused raw selection $id") {
+                driver.node(id)?.let { node -> try {
+                    val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+                    val descendants = (0 until node.childCount).mapNotNull { index ->
+                        node.getChild(index)?.let { child -> try {
+                            "id=${child.viewIdResourceName}/focused=${child.isFocused}/editable=${child.isEditable}/text=${child.text}/selection=${child.textSelectionStart}..${child.textSelectionEnd}"
+                        } finally { child.recycle() } }
+                    }
+                    actualSnapshot = "text=${node.text}, focused=${node.isFocused}, editable=${node.isEditable}, " +
+                        "enabled=${node.isEnabled}, selection=${node.textSelectionStart}..${node.textSelectionEnd}, " +
+                        "actions=${node.actionList.map { it.id }}, bounds=$bounds, children=$descendants"
+                    node.isFocused && node.textSelectionStart == start && node.textSelectionEnd == end
+                } finally { node.recycle() } } ?: run { actualSnapshot = "node missing"; false }
+            }
+        } catch (failure: AssertionError) {
+            // Read the native echo only after the unchanged real accessibility assertion fails.
+            // This distinguishes focus, native ACK and rendered-selection windows without
+            // issuing any extra input or accepting the native state as a passing result.
+            throw AssertionError("Actual selection failure $id expected focused/$start..$end; actual=[$actualSnapshot]; native=[${nativeSnapshot()}]", failure)
         }
     }
     @Test fun normalManagerEditorRestoresRawDraftAndStyleThenSavesAllMetadata() {
@@ -124,7 +143,20 @@ class HighlightRuleEditorHostTest {
                 driver.setText("highlight-rule-name", "Edited")
                 reveal("highlight-rule-group"); driver.setText("highlight-rule-group", " New group ")
                 scenario.onActivity { editor(it).onHighlightStyleChanged(editor(it).currentHighlightStyle().copy(bold = true)) }
-                actualSelection("highlight-rule-name", 1, 4)
+                actualSelection("highlight-rule-name", 1, 4) {
+                    var diagnostic = "native host unavailable"
+                    scenario.onActivity { host ->
+                        val state = editor(host).viewModel.state.value
+                        val ime = editor(host).dialog?.window?.decorView?.let { view ->
+                            androidx.core.view.ViewCompat.getRootWindowInsets(view)
+                                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
+                        }
+                        diagnostic = "loading=${state.loading}, saving=${state.saving}, finished=${state.finished}, " +
+                            "focus=${state.focus}, name=${state.draft?.rule?.name}, selections=${state.selections}, " +
+                            "scroll=${state.scroll}, error=${state.error}, imeVisible=$ime"
+                    }
+                    diagnostic
+                }
                 scenario.onActivity { host -> assertTrue(editor(host).childFragmentManager.fragments.any { it is FlutterFragment }) }
                 scenario.recreate(); ready()
                 driver.await("restored actual raw selection and focus") {
