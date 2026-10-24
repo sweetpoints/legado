@@ -7,7 +7,7 @@ import androidx.compose.ui.text.input.*
 import io.legado.app.model.analyzeRule.*
 
 /** Replacement CodeView's original JSON/JavaScript patterns, without modifying editable text. */
-class TxtTocRuleEditorSyntax(orange: Color, blue: Color, grey: Color, lightBlue: Color) :
+class LegacyTxtTocRuleEditorSyntax(orange: Color, blue: Color, grey: Color, lightBlue: Color) :
     VisualTransformation {
     private val patterns =
         listOf(

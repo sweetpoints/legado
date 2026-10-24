@@ -32,6 +32,8 @@ data class TxtTocRuleEditorUiState(
     val example: String = "",
     val cursors: List<Int> = listOf(0, 0, 0, 0),
     val focused: TxtTocEditorField? = null,
+    val selectionEnds: List<Int> = cursors,
+    val codeEditing: Boolean = false,
     val loading: Boolean = false,
     val loadFailed: Boolean = false,
     val saving: Boolean = false,
@@ -85,6 +87,10 @@ class TxtTocRuleEditorViewModel(
                         saved.get<Int>(KEY + "cursor." + it.name) ?: 0
                     },
                 focused = saved.get<String>(KEY + "focus")?.let(TxtTocEditorField::valueOf),
+                selectionEnds = TxtTocEditorField.entries.map {
+                    saved.get<Int>(KEY + "end." + it.name) ?: saved.get<Int>(KEY + "cursor." + it.name) ?: 0
+                },
+                codeEditing = saved.contains(KEY + "pendingField"),
                 loading = !restored && initialId != null,
                 finished = saved[KEY + "finished"] ?: false,
                 pendingCallback = saved[KEY + "pendingCallback"] ?: false,
@@ -147,23 +153,26 @@ class TxtTocRuleEditorViewModel(
         }
     }
 
-    fun setInput(field: TxtTocEditorField, text: String, cursor: Int) {
+    fun setInput(field: TxtTocEditorField, text: String, cursor: Int, end: Int = cursor) {
         if (state.value.saving || state.value.finished) return
         revision++
         saved[KEY + field.name] = text
         val position = cursor.coerceIn(0, text.length)
         saved[KEY + "cursor." + field.name] = position
+        val selectionEnd = end.coerceIn(0, text.length)
+        saved[KEY + "end." + field.name] = selectionEnd
+        val ends = state.value.selectionEnds.mapIndexed { index, old -> if (index == field.ordinal) selectionEnd else old }
         val cursors =
             state.value.cursors.mapIndexed { index, old ->
                 if (index == field.ordinal) position else old
             }
         mutableState.value =
             when (field) {
-                TxtTocEditorField.Name -> state.value.copy(name = text, cursors = cursors)
-                TxtTocEditorField.Regex -> state.value.copy(regex = text, cursors = cursors)
+                TxtTocEditorField.Name -> state.value.copy(name = text, cursors = cursors, selectionEnds = ends)
+                TxtTocEditorField.Regex -> state.value.copy(regex = text, cursors = cursors, selectionEnds = ends)
                 TxtTocEditorField.Replacement ->
-                    state.value.copy(replacement = text, cursors = cursors)
-                TxtTocEditorField.Example -> state.value.copy(example = text, cursors = cursors)
+                    state.value.copy(replacement = text, cursors = cursors, selectionEnds = ends)
+                TxtTocEditorField.Example -> state.value.copy(example = text, cursors = cursors, selectionEnds = ends)
             }
     }
 
@@ -230,6 +239,7 @@ class TxtTocRuleEditorViewModel(
             return null
         val field = state.value.focused ?: return null
         saved[KEY + "pendingField"] = field.name
+        mutableState.value = state.value.copy(codeEditing = true)
         return TxtTocEditorCodeRequest(
             field,
             state.value[field],
@@ -241,6 +251,7 @@ class TxtTocRuleEditorViewModel(
         val field =
             saved.get<String>(KEY + "pendingField")?.let(TxtTocEditorField::valueOf) ?: return false
         saved.remove<String>(KEY + "pendingField")
+        mutableState.value = state.value.copy(codeEditing = false)
         if (!state.value.saving && !state.value.finished && text != null) {
             setInput(field, text, cursor ?: 0)
             focus(field)
@@ -250,6 +261,7 @@ class TxtTocRuleEditorViewModel(
 
     fun codeCancelled() {
         saved.remove<String>(KEY + "pendingField")
+        mutableState.value = state.value.copy(codeEditing = false)
     }
 
     fun save() {
@@ -297,12 +309,12 @@ class TxtTocRuleEditorViewModel(
         return currentRule()
     }
 
-    fun requestClose() {
+    fun requestClose(forceDirty: Boolean = false) {
         if (state.value.saving || state.value.finished) return
         val current = currentRule()
         val original = this.original
         if (
-            current.name == original?.name.orEmpty() &&
+            !forceDirty && current.name == original?.name.orEmpty() &&
                 current.rule == original?.rule.orEmpty() &&
                 current.replacement == original?.replacement.orEmpty() &&
                 current.example.orEmpty() == original?.example.orEmpty()

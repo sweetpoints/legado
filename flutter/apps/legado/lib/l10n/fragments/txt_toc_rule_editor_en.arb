@@ -1,0 +1,17 @@
+{
+  "txtTocEditorTitle": "TXT TOC rule",
+  "txtTocEditorName": "Name",
+  "txtTocEditorRegex": "Regex",
+  "txtTocEditorReplacement": "Replacement (JavaScript supported)",
+  "txtTocEditorFullscreen": "Fullscreen editor",
+  "txtTocEditorSave": "Save",
+  "txtTocEditorMenu": "Menu",
+  "txtTocEditorCopy": "Copy rule",
+  "txtTocEditorPaste": "Paste rule",
+  "txtTocEditorBridgeError": "Field not acknowledged. Edit it again to retry.",
+  "txtTocEditorExit": "Exit",
+  "txtTocEditorExitMessage": "Keep editing the unsaved rule?",
+  "txtTocEditorKeep": "Keep editing",
+  "txtTocEditorDiscard": "Discard changes",
+  "txtTocEditorExample": "Example"
+}

@@ -24,7 +24,7 @@ import io.legado.app.R
 import io.legado.app.ui.components.LegadoTopAppBar
 
 @Composable
-fun TxtTocRuleEditorScreen(
+fun LegacyTxtTocRuleEditorScreen(
     state: TxtTocRuleEditorUiState,
     onInput: (TxtTocEditorField, String, Int) -> Unit,
     onFocus: (TxtTocEditorField) -> Unit,
@@ -46,7 +46,7 @@ fun TxtTocRuleEditorScreen(
     val lightBlue = colorResource(R.color.md_light_blue_600)
     val syntax =
         remember(orange, blue, grey, lightBlue) {
-            TxtTocRuleEditorSyntax(orange, blue, grey, lightBlue)
+            LegacyTxtTocRuleEditorSyntax(orange, blue, grey, lightBlue)
         }
     val requesters = remember { TxtTocEditorField.entries.associateWith { FocusRequester() } }
     LaunchedEffect(state.focused, state.loading) {
