@@ -73,4 +73,26 @@ class HighlightRuleEditorNativeCoordinatorTest {
         assertThrows(IllegalStateException::class.java) { command(c, old, "field", mapOf("key" to "name", "text" to "retired", "start" to 0, "end" to 0)) }
         assertEquals("Original", ((c.snapshot(current)["fields"] as Map<*, *>)["name"] as Map<*, *>)["text"])
     }
+    @Test fun throwingSavedCallbackClosesFinishedHostWithoutReplayingOrSavingAgain() = runTest(dispatcher) {
+        val repo = Repository(); val m = model(repo); runCurrent()
+        val host = Host().apply { registry.currentState = Lifecycle.State.RESUMED }
+        var refreshes = 0; var closes = 0; var reports = 0
+        val c = HighlightRuleEditorNativeCoordinator(m, host.lifecycle, backgroundScope, { true }, emptyMap(), { emptyMap() }, {},
+            { event ->
+                assertNull(m.state.value.event)
+                when (event) {
+                    HighlightRuleEditorEvent.Saved -> { refreshes++; throw IllegalStateException("reader unavailable") }
+                    HighlightRuleEditorEvent.Close -> closes++
+                    else -> Unit
+                }
+            }, {}, { reports++ }).also { coordinators += it }
+        c.bind(); m.save(); runCurrent()
+        assertTrue(m.state.value.finished); assertEquals(1, repo.saves)
+        assertEquals(1, refreshes); assertEquals(1, closes); assertEquals(1, reports)
+        c.onHostReady(); host.registry.currentState = Lifecycle.State.STARTED
+        host.registry.currentState = Lifecycle.State.RESUMED; runCurrent()
+        m.save(); runCurrent()
+        assertEquals(1, repo.saves); assertEquals(1, refreshes); assertEquals(1, closes)
+    }
+
 }

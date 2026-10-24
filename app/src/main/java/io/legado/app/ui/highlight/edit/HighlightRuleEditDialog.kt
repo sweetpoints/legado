@@ -48,7 +48,11 @@ class HighlightRuleEditDialog : BaseDialogFragment(0), HighlightStyleDialog.Styl
                 "style" to getString(R.string.highlight_style), "cancel" to getString(R.string.cancel),
                 "save" to getString(R.string.ok), "retry" to getString(R.string.retry)), preview::render, ::refreshStyleDialog,
             { event -> when (event) {
-                HighlightRuleEditorEvent.Saved -> { ReadBook.upHighlightRules(); dismissAllowingStateLoss() }
+                HighlightRuleEditorEvent.Saved -> {
+                    try { ReadBook.upHighlightRules() }
+                    catch (error: Exception) { requireContext().toastOnUi(error.localizedMessage ?: error.javaClass.simpleName) }
+                    finally { dismissAllowingStateLoss() }
+                }
                 HighlightRuleEditorEvent.Close -> dismissAllowingStateLoss()
                 HighlightRuleEditorEvent.Missing -> { requireContext().toastOnUi(R.string.highlight_rule_not_found); dismissAllowingStateLoss() }
                 HighlightRuleEditorEvent.Invalid -> requireContext().toastOnUi(getString(R.string.highlight_rule_invalid, viewModel.state.value.draft?.rule?.pattern.orEmpty()))
@@ -56,7 +60,8 @@ class HighlightRuleEditDialog : BaseDialogFragment(0), HighlightStyleDialog.Styl
                     showDialogFragment<HighlightStyleDialog>()
             } },
             { color -> if (childFragmentManager.findFragmentByTag(COLOR_TAG) == null)
-                HighlightColorPickerDialog.create(color).showNow(childFragmentManager, COLOR_TAG) })
+                HighlightColorPickerDialog.create(color).showNow(childFragmentManager, COLOR_TAG) },
+            { error -> requireContext().toastOnUi(error.localizedMessage ?: error.javaClass.simpleName) })
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); setStyle(STYLE_NO_TITLE, 0); isCancelable = false

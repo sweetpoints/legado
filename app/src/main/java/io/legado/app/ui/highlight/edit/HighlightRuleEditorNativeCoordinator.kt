@@ -17,6 +17,7 @@ internal class HighlightRuleEditorNativeCoordinator(
     private val styleChanged: () -> Unit,
     private val event: (HighlightRuleEditorEvent) -> Unit,
     private val color: (HighlightRuleColorDraft) -> Unit,
+    private val deliveryFailed: (Exception) -> Unit = {},
 ) : AutoCloseable {
     val generation = generations.incrementAndGet()
     private var owner: Any? = null
@@ -33,11 +34,21 @@ internal class HighlightRuleEditorNativeCoordinator(
             .collect { state ->
                 if (!canDeliver() || state.loading) return@collect
                 state.draft?.rule?.style?.let { style ->
-                    if (style != previousStyle) { previousStyle = style; styleChanged() }
+                    if (style != previousStyle) {
+                        previousStyle = style
+                        try { styleChanged() } catch (error: Exception) { runCatching { deliveryFailed(error) } }
+                    }
                 }
                 state.event?.let { value ->
                     model.consume(value)
-                    event(value)
+                    try {
+                        event(value)
+                    } catch (error: Exception) {
+                        // Saved is already consumed and durable. Never replay its side effect;
+                        // close the finished host even if refreshing its reader failed.
+                        runCatching { deliveryFailed(error) }
+                        if (value == HighlightRuleEditorEvent.Saved) runCatching { event(HighlightRuleEditorEvent.Close) }
+                    }
                 }
                 if (state.color == null) colorRequested = null
                 state.color?.takeUnless { state.finished }?.let { request ->
