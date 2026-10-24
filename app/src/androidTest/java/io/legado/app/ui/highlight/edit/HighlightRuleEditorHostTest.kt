@@ -2,6 +2,7 @@ package io.legado.app.ui.highlight.edit
 
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -70,13 +71,54 @@ class HighlightRuleEditorHostTest {
         val id = runBlocking(Dispatchers.IO) { appDb.highlightRuleDao.insert(original).single() }
         try {
             ActivityScenario.launch(HighlightRuleActivity::class.java).use { scenario ->
-                driver.await("normal manager rule loaded") {
-                    var loaded = false
-                    scenario.onActivity { loaded = it.viewModel.state.value.rules.any { row -> row.uuid == original.uuid } }
-                    loaded
+                // One original 30s entry deadline covers native readiness, the single real
+                // button click, native dialog creation and rendered Flutter accessibility.
+                val entryDeadline = SystemClock.uptimeMillis() + 30_000
+                var entryDiagnosis = "manager state not sampled"
+                fun sampleEntry(): HighlightRuleEditDialog? {
+                    var active: HighlightRuleEditDialog? = null
+                    scenario.onActivity { host ->
+                        val state = host.viewModel.state.value
+                        val fragments = host.supportFragmentManager.fragments
+                        active = fragments.filterIsInstance<HighlightRuleEditDialog>().singleOrNull()
+                        entryDiagnosis = "loaded=${state.loaded}, rowsReady=${state.rowsReady}, " +
+                            "busy=${state.busy}, canAct=${state.canAct}, error=${state.error}, " +
+                            "rowPresent=${state.rules.any { it.uuid == original.uuid }}, " +
+                            "effects=${state.draft.effects.map { it.action to it.id }}, " +
+                            "selection=${state.draft.selection}, fragments=${fragments.map { it.javaClass.simpleName to it.lifecycle.currentState }}, " +
+                            "dialogAdded=${active?.isAdded}, dialogShowing=${active?.dialog?.isShowing}, " +
+                            "children=${active?.childFragmentManager?.fragments?.map { it.javaClass.simpleName to it.lifecycle.currentState }}"
+                    }
+                    return active
                 }
-                compose.onNodeWithTag("highlight-management-edit-${original.uuid}").performScrollTo().performClick()
-                ready(); driver.setText("highlight-rule-name", "Edited")
+                fun awaitEntry(description: String, condition: () -> Boolean) {
+                    while (SystemClock.uptimeMillis() < entryDeadline) {
+                        if (condition()) return
+                        SystemClock.sleep(50)
+                    }
+                    val passed = condition()
+                    sampleEntry()
+                    assertTrue("Timed out waiting for $description within shared 30s entry deadline; $entryDiagnosis", passed)
+                }
+                awaitEntry("normal manager enabled edit entry") {
+                    sampleEntry()
+                    var available = false
+                    scenario.onActivity { host ->
+                        val state = host.viewModel.state.value
+                        available = state.canAct && state.rules.any { it.uuid == original.uuid }
+                    }
+                    available
+                }
+                compose.onNodeWithTag("highlight-management-edit-${original.uuid}")
+                    .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+                awaitEntry("native editor fragment after single manager edit click") {
+                    sampleEntry()?.isAdded == true
+                }
+                awaitEntry("rendered Flutter highlight-rule-name after manager entry") {
+                    sampleEntry()
+                    driver.node("highlight-rule-name")?.let { it.recycle(); true } ?: false
+                }
+                driver.setText("highlight-rule-name", "Edited")
                 reveal("highlight-rule-group"); driver.setText("highlight-rule-group", " New group ")
                 scenario.onActivity { editor(it).onHighlightStyleChanged(editor(it).currentHighlightStyle().copy(bold = true)) }
                 actualSelection("highlight-rule-name", 1, 4)
