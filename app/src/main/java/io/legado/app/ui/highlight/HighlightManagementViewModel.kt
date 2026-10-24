@@ -64,6 +64,8 @@ class HighlightManagementViewModel(
     private var dirty = false
     private var observeFailed = false
     private var orderBaseline: List<HighlightManagedRule>? = null
+    /** Native receipt that the real UI drag-begin command has been accepted. */
+    internal val reorderInProgress: Boolean get() = orderBaseline != null
     private var rangeBaseline: Set<String>? = null
     private val ready = CompletableDeferred<Unit>()
 
