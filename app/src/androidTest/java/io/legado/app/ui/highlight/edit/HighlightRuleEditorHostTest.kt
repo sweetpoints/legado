@@ -92,13 +92,16 @@ class HighlightRuleEditorHostTest {
                     return active
                 }
                 fun awaitEntry(description: String, condition: () -> Boolean) {
-                    while (SystemClock.uptimeMillis() < entryDeadline) {
-                        if (condition()) return
-                        SystemClock.sleep(50)
+                    // Compose v2 uses StandardTestDispatcher: external Thread.sleep polling
+                    // does not dispatch the Route's queued LaunchedEffect continuation.
+                    // waitUntil advances Compose work while preserving this entry's one budget.
+                    val remaining = (entryDeadline - SystemClock.uptimeMillis()).coerceAtLeast(1)
+                    try {
+                        compose.waitUntil(timeoutMillis = remaining, condition = condition)
+                    } catch (timeout: ComposeTimeoutException) {
+                        sampleEntry()
+                        throw AssertionError("Timed out waiting for $description within shared 30s entry deadline; $entryDiagnosis", timeout)
                     }
-                    val passed = condition()
-                    sampleEntry()
-                    assertTrue("Timed out waiting for $description within shared 30s entry deadline; $entryDiagnosis", passed)
                 }
                 awaitEntry("normal manager enabled edit entry") {
                     sampleEntry()
