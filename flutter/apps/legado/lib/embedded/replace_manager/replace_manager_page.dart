@@ -332,9 +332,15 @@ class _ReplaceManagerPageState extends State<ReplaceManagerPage>
             controller: scroll,
             itemExtent: rowExtent,
             itemCount: rows.length,
+            findChildIndexCallback: (key) {
+              if (key is! ValueKey<int>) return null;
+              final index = rows.indexWhere((row) => row.id == key.value);
+              return index < 0 ? null : index;
+            },
             itemBuilder: (context, index) {
               final row = rows[index];
               return GestureDetector(
+                key: ValueKey(row.id),
                 behavior: HitTestBehavior.opaque,
                 onLongPressStart: actionsEnabled
                     ? (e) => unawaited(
