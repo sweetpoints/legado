@@ -189,13 +189,39 @@ internal class NamedGroupsFlutterRobot(private val scenario: ActivityScenario<Ab
         }
         assertNotNull("Fresh same-generation named group input not ready within original budget", field)
         val node = requireNotNull(field)
+        var ownerTrace = "ownerMissing=true"
+        scenario.onActivity { activity ->
+            val dialog = activity.supportFragmentManager.fragments.filterIsInstance<NamedGroupDialog>().singleOrNull()
+            val decor = dialog?.dialog?.window?.decorView
+            val views = ArrayDeque<View>()
+            decor?.let(views::add)
+            val engines = mutableListOf<String>()
+            var visited = 0
+            while (views.isNotEmpty() && visited++ < 64) {
+                val view = views.removeFirst()
+                if (view is FlutterView && engines.size < 4) engines += "viewIdentity=${System.identityHashCode(view)}," +
+                    "engineIdentity=${System.identityHashCode(view.attachedFlutterEngine)}," +
+                    "attached=${view.isAttachedToFlutterEngine},displaying=${view.attachedFlutterEngine?.renderer?.isDisplayingFlutterUi}"
+                if (view is ViewGroup) for (index in 0 until minOf(view.childCount, 32)) views.add(view.getChildAt(index))
+            }
+            val ownedNode = decor?.createAccessibilityNodeInfo()
+            val ownedWindow = try { ownedNode?.windowId } finally { ownedNode?.recycle() }
+            ownerTrace = "ownedWindow=$ownedWindow," +
+                "ownedGeneration=${dialog?.coordinator?.generation},flutterOwners=$engines"
+        }
+        val activeRoot = instrumentation.uiAutomation.rootInActiveWindow
+        val activeWindow = try { activeRoot?.windowId } finally { activeRoot?.recycle() }
         try {
+            android.util.Log.i("NamedGroupsInput", "owner=$ownerTrace activeWindow=$activeWindow " +
+                "nodeIdentity=${node.hashCode()}")
             android.util.Log.i("NamedGroupsInput", "singleSetText uptime=${SystemClock.uptimeMillis()}," +
                 "beforeLength=${node.text?.length},selection=${node.textSelectionStart}..${node.textSelectionEnd}," +
                 "expectedLength=${text.length},windowId=${node.windowId},generation=$generation")
-            assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+            val accepted = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-            }))
+            })
+            android.util.Log.i("NamedGroupsInput", "singleSetTextResult uptime=${SystemClock.uptimeMillis()} accepted=$accepted")
+            assertTrue(accepted)
         } finally { node.recycle() }
         assertName(text)
     }
