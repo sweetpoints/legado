@@ -135,221 +135,241 @@ class _NamedGroupsState extends State<NamedGroupsPage> {
         !s.editing &&
         !s.recoveryFailed &&
         !s.mutationUncertain;
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) unawaited(command('back'));
-      },
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SafeArea(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: tag(
-                  'backdrop',
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: s?.busy == true
-                        ? null
-                        : () => unawaited(command('back')),
-                    child: const ColoredBox(color: Colors.transparent),
-                  ),
-                ),
-              ),
-              Center(
-                child: SizedBox(
-                  width: MediaQuery.sizeOf(context).width * .9,
-                  height: MediaQuery.sizeOf(context).height * .9,
-                  child: Material(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            tag(
-                              'close',
-                              IconButton(
-                                onPressed: s?.busy == true
-                                    ? null
-                                    : () => unawaited(command('back')),
-                                tooltip: l.close,
-                                icon: const Icon(Icons.close),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                l.namedGroupsTitle,
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                            ),
-                            tag(
-                              'add',
-                              TextButton(
-                                onPressed: available
-                                    ? () => unawaited(command('add'))
-                                    : null,
-                                child: Text(l.namedGroupsAdd),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (s == null || s.loading || s.busy)
-                          const LinearProgressIndicator(),
-                        if (failed || s?.error != null)
-                          tag(
-                            'error',
-                            Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Text(s?.error ?? l.namedGroupsError),
-                            ),
-                          ),
-                        if ((failed || s?.error != null) && s?.editing != true)
-                          tag(
-                            'retry',
-                            TextButton(
-                              onPressed: s?.busy == true
-                                  ? null
-                                  : () => unawaited(command('retry')),
-                              child: Text(l.namedGroupsRetry),
-                            ),
-                          ),
-                        Expanded(
-                          child: tag(
-                            'list',
-                            ListView.builder(
-                              itemCount: s?.groups.length ?? 0,
-                              findChildIndexCallback: (key) {
-                                if (key is! ValueKey<String> || s == null) {
-                                  return null;
-                                }
-                                final i = s.groups.indexWhere(
-                                  (g) => g.id == key.value,
-                                );
-                                return i < 0 ? null : i;
-                              },
-                              itemBuilder: (context, i) {
-                                final row = s!.groups[i];
-                                return ListTile(
-                                  key: ValueKey(row.id),
-                                  title: Text(row.name),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      tag(
-                                        'edit-${row.id}',
-                                        TextButton(
-                                          onPressed: available
-                                              ? () => unawaited(
-                                                  command('edit', {
-                                                    'id': row.id,
-                                                  }),
-                                                )
-                                              : null,
-                                          child: Text(l.namedGroupsEdit),
-                                        ),
-                                      ),
-                                      tag(
-                                        'delete-${row.id}',
-                                        TextButton(
-                                          onPressed: available
-                                              ? () => unawaited(
-                                                  command('delete', {
-                                                    'id': row.id,
-                                                  }),
-                                                )
-                                              : null,
-                                          child: Text(l.namedGroupsDelete),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        if (s?.showDone == true)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: tag(
-                              'done',
-                              TextButton(
-                                onPressed: s?.busy == true
-                                    ? null
-                                    : () => unawaited(command('back')),
-                                child: Text(l.namedGroupsConfirm),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              if (s?.editing == true) ...[
+    // This page belongs only to NamedGroupDialog's floating, non-fullscreen
+    // Android window. That host keeps adjustResize and already fits its frame
+    // above the IME. Consume its bottom inset here once; a retained embedding
+    // inset must not shrink that already-local viewport again (including Dialog).
+    // This is not a global keyboard policy or a standalone/fullscreen host policy.
+    return MediaQuery.removeViewInsets(
+      context: context,
+      removeBottom: true,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) unawaited(command('back'));
+        },
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          backgroundColor: Colors.transparent,
+          body: SafeArea(
+            child: Stack(
+              children: [
                 Positioned.fill(
-                  child: ModalBarrier(
-                    dismissible: !s!.busy,
-                    onDismiss: () => unawaited(command('cancel')),
-                    color: Colors.black26,
+                  child: tag(
+                    'backdrop',
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: s?.busy == true
+                          ? null
+                          : () => unawaited(command('back')),
+                      child: const ColoredBox(color: Colors.transparent),
+                    ),
                   ),
                 ),
                 Center(
-                  child: AlertDialog(
-                    title: Text(
-                      s.original == null ? l.namedGroupsAdd : l.namedGroupsEdit,
-                    ),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        tag(
-                          'name',
-                          TextField(
-                            controller: controller,
-                            focusNode: focus,
-                            enabled:
-                                !s.busy &&
-                                !s.recoveryFailed &&
-                                !s.mutationUncertain,
-                            decoration: InputDecoration(
-                              labelText: l.namedGroupsName,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => SizedBox(
+                      width: constraints.maxWidth * .9,
+                      height: constraints.maxHeight * .9,
+                      child: Material(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                tag(
+                                  'close',
+                                  IconButton(
+                                    onPressed: s?.busy == true
+                                        ? null
+                                        : () => unawaited(command('back')),
+                                    tooltip: l.close,
+                                    icon: const Icon(Icons.close),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    l.namedGroupsTitle,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge,
+                                  ),
+                                ),
+                                tag(
+                                  'add',
+                                  TextButton(
+                                    onPressed: available
+                                        ? () => unawaited(command('add'))
+                                        : null,
+                                    child: Text(l.namedGroupsAdd),
+                                  ),
+                                ),
+                              ],
                             ),
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => unawaited(command('confirm')),
-                          ),
+                            if (s == null || s.loading || s.busy)
+                              const LinearProgressIndicator(),
+                            if (failed || s?.error != null)
+                              tag(
+                                'error',
+                                Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Text(s?.error ?? l.namedGroupsError),
+                                ),
+                              ),
+                            if ((failed || s?.error != null) &&
+                                s?.editing != true)
+                              tag(
+                                'retry',
+                                TextButton(
+                                  onPressed: s?.busy == true
+                                      ? null
+                                      : () => unawaited(command('retry')),
+                                  child: Text(l.namedGroupsRetry),
+                                ),
+                              ),
+                            Expanded(
+                              child: tag(
+                                'list',
+                                ListView.builder(
+                                  itemCount: s?.groups.length ?? 0,
+                                  findChildIndexCallback: (key) {
+                                    if (key is! ValueKey<String> || s == null) {
+                                      return null;
+                                    }
+                                    final i = s.groups.indexWhere(
+                                      (g) => g.id == key.value,
+                                    );
+                                    return i < 0 ? null : i;
+                                  },
+                                  itemBuilder: (context, i) {
+                                    final row = s!.groups[i];
+                                    return ListTile(
+                                      key: ValueKey(row.id),
+                                      title: Text(row.name),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          tag(
+                                            'edit-${row.id}',
+                                            TextButton(
+                                              onPressed: available
+                                                  ? () => unawaited(
+                                                      command('edit', {
+                                                        'id': row.id,
+                                                      }),
+                                                    )
+                                                  : null,
+                                              child: Text(l.namedGroupsEdit),
+                                            ),
+                                          ),
+                                          tag(
+                                            'delete-${row.id}',
+                                            TextButton(
+                                              onPressed: available
+                                                  ? () => unawaited(
+                                                      command('delete', {
+                                                        'id': row.id,
+                                                      }),
+                                                    )
+                                                  : null,
+                                              child: Text(l.namedGroupsDelete),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            if (s?.showDone == true)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: tag(
+                                  'done',
+                                  TextButton(
+                                    onPressed: s?.busy == true
+                                        ? null
+                                        : () => unawaited(command('back')),
+                                    child: Text(l.namedGroupsConfirm),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                        if (failed || s.error != null)
-                          Text(s.error ?? l.namedGroupsError),
-                      ],
+                      ),
                     ),
-                    actions: [
-                      tag(
-                        'cancel',
-                        TextButton(
-                          onPressed: s.busy
-                              ? null
-                              : () => unawaited(command('cancel')),
-                          child: Text(l.namedGroupsCancel),
-                        ),
-                      ),
-                      tag(
-                        'confirm',
-                        TextButton(
-                          onPressed:
-                              s.busy || s.recoveryFailed || s.mutationUncertain
-                              ? null
-                              : () => unawaited(command('confirm')),
-                          child: Text(l.namedGroupsConfirm),
-                        ),
-                      ),
-                    ],
                   ),
                 ),
+                if (s?.editing == true) ...[
+                  Positioned.fill(
+                    child: ModalBarrier(
+                      dismissible: !s!.busy,
+                      onDismiss: () => unawaited(command('cancel')),
+                      color: Colors.black26,
+                    ),
+                  ),
+                  Center(
+                    child: AlertDialog(
+                      scrollable: true,
+                      title: Text(
+                        s.original == null
+                            ? l.namedGroupsAdd
+                            : l.namedGroupsEdit,
+                      ),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          tag(
+                            'name',
+                            TextField(
+                              controller: controller,
+                              focusNode: focus,
+                              enabled:
+                                  !s.busy &&
+                                  !s.recoveryFailed &&
+                                  !s.mutationUncertain,
+                              decoration: InputDecoration(
+                                labelText: l.namedGroupsName,
+                              ),
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => unawaited(command('confirm')),
+                            ),
+                          ),
+                          if (failed || s.error != null)
+                            Text(s.error ?? l.namedGroupsError),
+                        ],
+                      ),
+                      actions: [
+                        tag(
+                          'cancel',
+                          TextButton(
+                            onPressed: s.busy
+                                ? null
+                                : () => unawaited(command('cancel')),
+                            child: Text(l.namedGroupsCancel),
+                          ),
+                        ),
+                        tag(
+                          'confirm',
+                          TextButton(
+                            onPressed:
+                                s.busy ||
+                                    s.recoveryFailed ||
+                                    s.mutationUncertain
+                                ? null
+                                : () => unawaited(command('confirm')),
+                            child: Text(l.namedGroupsConfirm),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
