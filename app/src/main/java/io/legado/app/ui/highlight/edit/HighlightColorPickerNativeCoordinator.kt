@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.*
 
 internal class HighlightColorPickerNativeCoordinator(private val model: HighlightColorPickerViewModel,
     private val lifecycle: Lifecycle, scope: CoroutineScope, private val ready: () -> Boolean,
-    private val labels: Map<String, String>, private val completed: (Boolean, Int) -> Unit) : AutoCloseable {
+    private val labels: Map<String, String>, private val completionFailed: (Exception) -> Unit = {}, private val completed: (Boolean, Int) -> Unit) : AutoCloseable {
     val generation = generations.incrementAndGet()
     private var owner: Any? = null
     private var closed = false
@@ -17,7 +17,10 @@ internal class HighlightColorPickerNativeCoordinator(private val model: Highligh
     private val observation = scope.launch {
         combine(model.state, lifecycle.currentStateFlow, updates) { state, _, _ -> state }.collect {
             if (!closed && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && ready())
-                model.consumeResult()?.let { (save, value) -> completed(save, value) }
+                model.consumeResult()?.let { (save, value) ->
+                    try { completed(save, value) }
+                    catch (error: Exception) { runCatching { completionFailed(error) } }
+                }
         }
     }
     fun onHostReady() { updates.value++ }

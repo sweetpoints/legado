@@ -46,4 +46,22 @@ class HighlightColorPickerViewModelTest {
             c.close(); assertThrows(IllegalStateException::class.java) { command(2, "cancel") }
         } finally { c.close() }
     }
+    @Test fun throwingCompletionReportsAndClosesWithoutReplayingConsumedColorResult() = runTest(dispatcher) {
+        val m = model(); val host = Host().apply { registry.currentState = Lifecycle.State.RESUMED }
+        var results = 0; var closes = 0; var reports = 0
+        val c = HighlightColorPickerNativeCoordinator(m, host.lifecycle, backgroundScope, { true }, emptyMap(),
+            completionFailed = { reports++ }) { _, _ ->
+                try { results++; throw IllegalStateException("style host unavailable") }
+                finally { closes++ }
+            }
+        try {
+            c.bind(); m.hex("#80123456"); m.finish(true); runCurrent()
+            assertEquals(1, results); assertEquals(1, reports); assertEquals(1, closes)
+            assertTrue(m.state.value.finished); assertTrue(m.state.value.saved); assertNull(m.consumeResult())
+            c.onHostReady(); host.registry.currentState = Lifecycle.State.STARTED
+            host.registry.currentState = Lifecycle.State.RESUMED; runCurrent()
+            assertEquals(1, results); assertEquals(1, closes)
+        } finally { c.close() }
+    }
+
 }

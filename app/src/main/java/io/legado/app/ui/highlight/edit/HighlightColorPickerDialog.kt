@@ -16,6 +16,7 @@ import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.utils.resizeForIme
 import io.legado.app.utils.setLayout
+import io.legado.app.utils.toastOnUi
 import java.util.UUID
 
 /** Independent UI engine/nonce: the editor binding and native style sheet remain intact underneath. */
@@ -31,12 +32,23 @@ class HighlightColorPickerDialog : BaseDialogFragment(0) {
     internal val coordinator by lazy {
         HighlightColorPickerNativeCoordinator(viewModel, lifecycle, lifecycleScope,
             { isAdded && !parentFragmentManager.isStateSaved && !childFragmentManager.isStateSaved && parentFragment is HighlightRuleEditDialog },
-            mapOf("heading" to getString(R.string.highlight_style), "save" to getString(R.string.ok), "cancel" to getString(R.string.cancel))) { save, value ->
-                val editor = requireParentFragment() as HighlightRuleEditDialog
-                if (save) editor.onColorSelected(requireArguments().getInt("channel"), value)
-                editor.viewModel.closeColor()
-                dismissAllowingStateLoss()
+            mapOf("heading" to getString(R.string.highlight_style), "save" to getString(R.string.ok), "cancel" to getString(R.string.cancel)),
+            completionFailed = { error ->
+                try { requireContext().toastOnUi(error.localizedMessage ?: error.javaClass.simpleName) }
+                finally { finishColorHost() }
+            }) { save, value ->
+                try {
+                    val editor = requireParentFragment() as HighlightRuleEditDialog
+                    if (save) editor.onColorSelected(requireArguments().getInt("channel"), value)
+                } finally { finishColorHost() }
             }
+    }
+    private var colorHostFinished = false
+    private fun finishColorHost() {
+        if (colorHostFinished) return
+        colorHostFinished = true
+        try { (parentFragment as? HighlightRuleEditDialog)?.viewModel?.closeColor() }
+        finally { dismissAllowingStateLoss() }
     }
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setStyle(STYLE_NO_TITLE, 0); isCancelable = false }
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
