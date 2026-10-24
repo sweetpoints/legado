@@ -155,20 +155,53 @@ class SourceDragOrderUiTest {
                     val destinationY = last.exactCenterY() + last.height() / 4f
                     flutter.touchDown(startX, startY).use { touch ->
                         touch.hold(ViewConfiguration.getLongPressTimeout().toLong() + 200)
-                        touch.moveTo(startX, destinationY)
-                        flutter.await("Flutter held drag reaches the target row") {
-                            var dragging = false
-                            scenario.onActivity {
-                                dragging = it.managerModel.state.value.draggingKey == keys.first()
+                        // The Android hold does not acknowledge Flutter's delayed recognizer.
+                        // Keep the real pointer still until beginDrag arrives before moving it;
+                        // early movement can reject that recognizer while its Dart timer waits.
+                        // Recognition and the original target assertion share one 30s budget.
+                        val deadline = SystemClock.uptimeMillis() + 30_000
+                        var receipt = "no native drag receipt"
+                        fun dragging(): Boolean {
+                            var matched = false
+                            scenario.onActivity { activity ->
+                                val state = activity.managerModel.state.value
+                                matched = state.draggingKey == keys.first()
+                                receipt = "nativeDraggingMatches=$matched,canMove=${state.canMove}," +
+                                    "loading=${state.loading},busy=${state.busy},ascending=${state.ascending}," +
+                                    "rowCount=${state.rows.size}," +
+                                    "visibleFixtureOrder=${state.rows.take(4).map { keys.indexOf(it.url) }}," +
+                                    "viewport=${activity.window.decorView.width}x${activity.window.decorView.height}"
                             }
-                            val bounds = flutter.node("source-manager-row-menu:${keys.first()}")
-                            val moved = bounds?.let { node ->
-                                val rect = android.graphics.Rect()
-                                node.getBoundsInScreen(rect)
-                                node.recycle()
-                                rect.centerY() > startY + first.height()
-                            } ?: false
-                            dragging && moved
+                            return matched
+                        }
+                        fun awaitHeld(description: String, condition: () -> Boolean) {
+                            while (SystemClock.uptimeMillis() < deadline) {
+                                if (condition()) return
+                                SystemClock.sleep(minOf(50L,
+                                    (deadline - SystemClock.uptimeMillis()).coerceAtLeast(0)))
+                            }
+                            val matched = condition()
+                            assertTrue("$description; $receipt; start=$first,target=$last", matched)
+                        }
+                        try {
+                            awaitHeld("Flutter acknowledges the held drag before movement", ::dragging)
+                            touch.moveTo(startX, destinationY)
+                            awaitHeld("Flutter held drag reaches the target row") {
+                                val started = dragging()
+                                val bounds = flutter.node("source-manager-row-menu:${keys.first()}")
+                                val moved = bounds?.let { node ->
+                                    val rect = android.graphics.Rect()
+                                    node.getBoundsInScreen(rect)
+                                    node.recycle()
+                                    receipt += ",actualHeldBounds=$rect"
+                                    rect.centerY() > startY + first.height()
+                                } ?: false
+                                started && moved
+                            }
+                        } catch (failure: AssertionError) {
+                            runCatching { screenshot("book-held-failure-${SystemClock.uptimeMillis()}") }
+                                .exceptionOrNull()?.let(failure::addSuppressed)
+                            throw failure
                         }
                         // Flutter owns the held visual preview; native order commits only after drop.
                         whileHeld()
