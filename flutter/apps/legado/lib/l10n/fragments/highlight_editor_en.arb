@@ -1,0 +1,8 @@
+{
+  "highlightEditorBridgeError": "Field not acknowledged. Edit it again to retry.",
+  "highlightColorBridgeError": "Color input not acknowledged. Edit it again to retry.",
+  "highlightColorInvalidHex": "Enter a valid hexadecimal color.",
+  "highlightEditorPendingExit": "Some input has not been acknowledged. Keep editing?",
+  "highlightEditorKeep": "Keep editing",
+  "highlightEditorDiscard": "Discard changes"
+}

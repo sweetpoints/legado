@@ -1,0 +1,8 @@
+{
+  "highlightEditorBridgeError": "字段尚未确认，请重新编辑后重试。",
+  "highlightColorBridgeError": "颜色输入尚未确认，请重新编辑后重试。",
+  "highlightColorInvalidHex": "请输入有效的十六进制颜色。",
+  "highlightEditorPendingExit": "部分输入尚未确认，是否继续编辑？",
+  "highlightEditorKeep": "继续编辑",
+  "highlightEditorDiscard": "放弃修改"
+}
