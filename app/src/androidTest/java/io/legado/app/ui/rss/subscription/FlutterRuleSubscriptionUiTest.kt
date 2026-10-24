@@ -696,6 +696,52 @@ class FlutterRuleSubscriptionUiTest {
                 rendered && accepted
             }
         }
+        fun clickAutomaticAfterZero() {
+            val frameReady = AtomicBoolean(true)
+            driver.await("visible enabled automatic control above zero interval") {
+                if (!frameReady.get()) return@await false
+                driver.node("subscription-auto")?.let { control ->
+                    val pending = ArrayDeque<AccessibilityNodeInfo>()
+                    pending.add(control)
+                    try {
+                        while (pending.isNotEmpty()) {
+                            val current = pending.removeFirst()
+                            try {
+                                if (current.isVisibleToUser && current.isEnabled && current.isCheckable &&
+                                    !current.isChecked && current.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }) {
+                                    // One real action on the automatic switch, never on an ancestor.
+                                    assertTrue(current.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                                    return@await true
+                                }
+                                for (i in 0 until current.childCount) current.getChild(i)?.let(pending::add)
+                            } finally { current.recycle() }
+                        }
+                    } finally { pending.forEach { it.recycle() } }
+                    return@await false
+                }
+                var node = driver.node("subscription-editor")
+                while (node != null) {
+                    val current = node
+                    if (current.isScrollable) {
+                        try {
+                            // Zero was just revealed at the bottom. Automatic is above it;
+                            // CI's owned ScrollView advertised only BACKWARD at this point.
+                            val backward = AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                            if (current.actionList.any { it.id == backward } && current.performAction(backward)) {
+                                frameReady.set(false)
+                                scenario!!.onActivity { activity ->
+                                    activity.window.decorView.postOnAnimation { frameReady.set(true) }
+                                }
+                            }
+                        } finally { current.recycle() }
+                        return@await false
+                    }
+                    node = current.parent
+                    current.recycle()
+                }
+                false
+            }
+        }
         currentType = 0
         launch()
         driver.click("subscription-edit-${fixture.id}")
@@ -724,7 +770,7 @@ class FlutterRuleSubscriptionUiTest {
             it.editor?.automatic == false && it.editor?.silent == false && it.editor?.silentEnabled == false
         }
         probe("zero-interval-disabled", "interval")
-        click("subscription-auto")
+        clickAutomaticAfterZero()
         acknowledged("automatic re-enable") { it.editor?.interval == "24" && it.editor?.automatic == true }
         probe("automatic-reenabled", "interval")
         inputReenabledInterval("48")
