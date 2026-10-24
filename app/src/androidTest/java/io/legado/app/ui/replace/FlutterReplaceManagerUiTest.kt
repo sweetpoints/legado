@@ -49,7 +49,21 @@ class FlutterReplaceManagerUiTest {
                     assertEquals(rule.group,stored.group);assertEquals(rule.scope,stored.scope);assertTrue(stored.scopeTitle);assertFalse(stored.isEnabled)
                     assertEquals(sample,ReplacePreviewConfig.sample(rule.id))
                     scenario.recreate();scenario.onActivity { model=it.managementModel }
-                    ui.await15("restored Room and private session") { model!!.state.value.loaded && model!!.state.value.query==token && model!!.state.value.selected==setOf(rule.id) }
+                    // Native restoration can finish before the recreated UI engine publishes its
+                    // first rendered field. Require both receipts within the original 15s budget.
+                    ui.await15("restored Room/private session and actual Flutter query") {
+                        val state = model!!.state.value
+                        val nativeRestored = state.loaded && state.query == token && state.selected == setOf(rule.id)
+                        val field = ui.driver.node("replace-rule-search")
+                        val rendered = field?.let {
+                            try {
+                                it.refresh() && it.viewIdResourceName == "replace-rule-search" &&
+                                    it.isVisibleToUser && it.isEditable && it.isEnabled &&
+                                    it.text?.toString() == token
+                            } finally { it.recycle() }
+                        } ?: false
+                        nativeRestored && rendered
+                    }
                     assertEquals(token,ui.driver.text("replace-rule-search"))
                     ui.await15("restored actual checked row") { ui.checked("replace-rule-select-${rule.id}",true) }
                     ui.click("replace-rule-enabled-${rule.id}")
