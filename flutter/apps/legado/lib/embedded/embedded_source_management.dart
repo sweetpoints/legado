@@ -26,6 +26,10 @@ import 'dictionary_manager/dictionary_manager_page.dart';
 import 'rss_favorites/rss_favorites_page.dart';
 import 'rss_favorites/rss_favorite_config_page.dart';
 import 'dictionary_rule_editor/dictionary_rule_editor_page.dart';
+import 'highlight_manager/highlight_manager_page.dart';
+import 'highlight_manager/highlight_groups_page.dart';
+import 'txt_toc_manager/txt_toc_manager_page.dart';
+import 'named_groups/named_groups_page.dart';
 
 part 'embedded_source_management.g.dart';
 
@@ -46,6 +50,11 @@ Future<EmbeddedSourceConfiguration> embeddedSourceConfiguration(Ref ref) async {
       .invokeMapMethod<String, Object?>('bootstrap');
   if (result == null ||
       ![
+        '/highlight-manager',
+        '/highlight-groups',
+        '/txt-toc-manager',
+        '/txt-toc-picker',
+        '/named-groups',
         '/replace-manager',
         '/highlight-rule-editor',
         '/highlight-rule-color-picker',
@@ -92,6 +101,26 @@ GoRouter embeddedSourceRouter(Ref ref) {
     restorationScopeId: 'embedded-router',
     initialLocation: configuration.route,
     routes: [
+      GoRoute(
+        path: '/highlight-manager',
+        builder: (_, _) => const HighlightManagerPage(),
+      ),
+      GoRoute(
+        path: '/highlight-groups',
+        builder: (_, _) => const HighlightGroupsPage(),
+      ),
+      GoRoute(
+        path: '/txt-toc-manager',
+        builder: (_, _) => const TxtTocManagerPage(),
+      ),
+      GoRoute(
+        path: '/txt-toc-picker',
+        builder: (_, _) => const TxtTocPickerPage(),
+      ),
+      GoRoute(
+        path: '/named-groups',
+        builder: (_, _) => const NamedGroupsPage(),
+      ),
       GoRoute(
         path: '/replace-manager',
         builder: (_, _) => const ReplaceManagerPage(),

@@ -10,6 +10,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+@androidx.annotation.Keep
 enum class HighlightManagementAction {
     Add,
     Edit,
@@ -22,6 +23,7 @@ enum class HighlightManagementAction {
     EmptyExport,
 }
 
+@androidx.annotation.Keep
 data class HighlightManagementEffect(
     val token: String,
     val action: HighlightManagementAction,
@@ -30,6 +32,7 @@ data class HighlightManagementEffect(
     val text: String? = null,
 )
 
+@androidx.annotation.Keep
 data class HighlightManagementDraft(
     val filter: String? = null,
     val selection: Set<String> = emptySet(),
@@ -39,6 +42,8 @@ data class HighlightManagementDraft(
     val exporting: String? = null,
     val exportResult: String? = null,
     val revision: Long = 0,
+    val scrollIndex: Int = 0,
+    val scrollOffset: Double = 0.0,
 )
 
 interface HighlightManagementSessionRepository {

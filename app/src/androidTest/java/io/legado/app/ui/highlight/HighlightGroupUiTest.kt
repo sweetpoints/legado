@@ -70,6 +70,7 @@ class HighlightGroupUiTest {
     @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val flutter = FlutterUiTestDriver(instrumentation)
+    private val actual = HighlightManagerUiProbe(flutter, instrumentation)
     private val context = instrumentation.targetContext
     private val dao = appDb.highlightRuleDao
     private val namedUngrouped = context.getString(R.string.no_group)
@@ -103,6 +104,7 @@ class HighlightGroupUiTest {
         savedRules = dao.all
         dao.deleteAll()
         dao.insert(*fixtures.toTypedArray())
+        flutter.enableAccessibility()
         scenario = ActivityScenario.launch(HighlightRuleActivity::class.java)
         awaitRules(dao.all)
     }
@@ -174,18 +176,9 @@ class HighlightGroupUiTest {
     @Test
     fun fontSizeAndNegativeSpacingPersistAndResetThroughTheActualStyleDialog() {
         fun openStyle() {
-            compose
-                .onNodeWithTag("highlight-management-list")
-                .performScrollToNode(
-                    hasTestTag(
-                        "highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}"
-                    )
-                )
-            compose
-                .onNodeWithTag(
-                    "highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}"
-                )
-                .performClick()
+            val id = "highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}"
+            actual.reveal(id)
+            actual.click(id)
             awaitFlutterEditorSave()
             clickFlutterEditorStyle()
             compose.waitUntil(timeoutMillis = 10_000) {
@@ -264,18 +257,9 @@ class HighlightGroupUiTest {
     fun pillMarginEditsPersistAndResetThroughTheActualStyleDialog() {
         fun margin(value: Int) = context.getString(R.string.highlight_pill_padding_value, value)
         fun openStyle() {
-            compose
-                .onNodeWithTag("highlight-management-list")
-                .performScrollToNode(
-                    hasTestTag(
-                        "highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}"
-                    )
-                )
-            compose
-                .onNodeWithTag(
-                    "highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}"
-                )
-                .performClick()
+            val id = "highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}"
+            actual.reveal(id)
+            actual.click(id)
             awaitFlutterEditorSave()
             clickFlutterEditorStyle()
         }
@@ -329,7 +313,7 @@ class HighlightGroupUiTest {
 
     @Test
     fun filterRenameMoveAndDeleteUseRealDialogsAndPreserveOtherRules() {
-        compose.onNodeWithTag("highlight-management-menu").performClick()
+        actual.click("highlight-management-menu")
         compose.waitForIdle()
         val menuBitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
@@ -346,8 +330,8 @@ class HighlightGroupUiTest {
 
         menu("highlight-management-groups")
         groupAction("Characters", editing = true)
-        compose.onNodeWithTag("highlight-group-name").performTextReplacement("People")
-        compose.onNodeWithTag("highlight-group-rename-confirm").performClick()
+        flutter.setText("highlight-group-name", "People")
+        actual.click("highlight-group-rename-confirm")
         awaitGroup("People")
         screenshot("highlight-group-manager")
         dismissGroupManager()
@@ -358,9 +342,9 @@ class HighlightGroupUiTest {
         awaitRules(dao.all.filter { it.group == "People" })
         menu("highlight-management-groups")
         groupAction("People")
-        compose.onNodeWithTag("highlight-group-choose-move").performClick()
+        actual.click("highlight-group-choose-move")
         // This is a real group named like the special ungrouped option.
-        compose.onNodeWithTag("highlight-group-move-$namedUngrouped").performClick()
+        actual.click("highlight-group-move-$namedUngrouped")
         await { dao.all.count { it.group == namedUngrouped } == 3 }
         assertEquals("Quotes", dao.all.single { it.name == "Quote" }.group)
         assertNull(dao.all.single { it.name == "Loose rule" }.group)
@@ -371,8 +355,8 @@ class HighlightGroupUiTest {
         awaitRules(dao.all.filter { it.group == namedUngrouped })
         menu("highlight-management-groups")
         groupAction(namedUngrouped)
-        compose.onNodeWithTag("highlight-group-choose-move").performClick()
-        compose.onNodeWithTag("highlight-group-move-none").performClick()
+        actual.click("highlight-group-choose-move")
+        actual.click("highlight-group-move-none")
         await { dao.all.count { it.group == null } == 4 }
         dismissGroupManager()
         awaitRules(dao.all)
@@ -383,7 +367,7 @@ class HighlightGroupUiTest {
         awaitRules(dao.all.filter { it.group == "Quotes" })
         menu("highlight-management-groups")
         groupAction("Quotes")
-        compose.onNodeWithTag("highlight-group-delete-confirm").performClick()
+        actual.click("highlight-group-delete-confirm")
         await { dao.all.size == 4 }
         assertEquals(
             fixtures.filter { it.group != "Quotes" }.map { it.uuid }.toSet(),
@@ -431,7 +415,7 @@ class HighlightGroupUiTest {
                 exported.rules!!.map { it!!.uuid }.toSet(),
             )
             assertEquals(5, exported.rules.size)
-            compose.onNodeWithText(context.getString(R.string.export_success)).assertDoesNotExist()
+            assertFalse(actual.exists("highlight-management-export-result"))
         } finally {
             instrumentation.removeMonitor(monitor)
         }
@@ -483,19 +467,51 @@ class HighlightGroupUiTest {
                 )
             )
             val expected = dao.all.first()
-            compose.onNodeWithTag("highlight-management-select-${expected.uuid}").performClick()
-            compose.onNodeWithTag("highlight-management-selection-menu").performClick()
-            compose.onNodeWithTag("highlight-management-export").performClick()
+            actual.click("highlight-management-select-${expected.uuid}")
+            actual.click("highlight-management-selection-menu")
+            actual.click("highlight-management-export")
             compose.onNodeWithText(context.getString(R.string.upload_url)).performClick()
-            compose.waitUntil(15_000) {
-                compose
-                    .onAllNodesWithTag("highlight-management-export-result")
-                    .fetchSemanticsNodes()
-                    .isNotEmpty()
+            try {
+                // The upload chooser remains native Compose. Its result-delivery LaunchedEffect
+                // must advance under Compose v2 while the Flutter receipt is checked exactly.
+                compose.waitUntil(timeoutMillis = 15_000) {
+                    actual.text("highlight-management-export-result") == url && actual.text("highlight-management-export-summary") == summary
+                }
+            } catch (timeout: ComposeTimeoutException) {
+                var native = "not sampled"
+                instrumentation.runOnMainSync {
+                    val monitor = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                    val stages = listOf(
+                        androidx.test.runner.lifecycle.Stage.RESUMED,
+                        androidx.test.runner.lifecycle.Stage.STARTED,
+                        androidx.test.runner.lifecycle.Stage.PAUSED,
+                        androidx.test.runner.lifecycle.Stage.STOPPED,
+                    )
+                    val activities = stages.flatMap { monitor.getActivitiesInStage(it) }
+                    val manager = activities.filterIsInstance<HighlightRuleActivity>().firstOrNull()
+                    val management = manager?.viewModel?.state?.value
+                    val chooser = activities.filterIsInstance<HandleFileActivity>().firstOrNull()
+                    val choice = chooser?.choicesModel?.state?.value
+                    native = "managerPresent=${manager != null},managerLifecycle=${manager?.lifecycle?.currentState}," +
+                        "managerBusy=${management?.busy},managerErrorPresent=${management?.error != null}," +
+                        "exporting=${management?.draft?.exporting != null},resultPresent=${management?.draft?.exportResult != null}," +
+                        "resultEquals=${management?.draft?.exportResult == url}," +
+                        "choicePresent=${choice != null},choiceLifecycle=${chooser?.lifecycle?.currentState},choicePhase=${choice?.phase},choiceLoaded=${choice?.loaded}," +
+                        "choiceBusy=${choice?.busy},choiceResultPresent=${choice?.result != null},choiceResultEquals=${choice?.result == url}," +
+                        "choiceIssuePresent=${choice?.issue != null},choiceErrorPresent=${choice?.error != null}"
+                }
+                throw AssertionError(
+                    "Actual export URL/summary receipt within original shared 15s Compose wait; " +
+                        "uploadCaptured=${uploaded.get() != null},uploadedNameEquals=${uploadedName.get() == "HighlightRules.json"}," +
+                        "expectedUrlLength=${url.length},expectedSummaryLength=${summary.length},native=[$native]," +
+                        "actualUrl=[${actual.diagnostic("highlight-management-export-result", url)}]," +
+                        "actualSummary=[${actual.diagnostic("highlight-management-export-summary", summary)}]",
+                    timeout,
+                )
             }
-            compose.onNodeWithTag("highlight-management-export-result").assertTextEquals(url)
-            compose.onNodeWithTag("highlight-management-export-summary").assertTextEquals(summary)
-            compose.onNodeWithText(context.getString(R.string.export_success)).assertIsDisplayed()
+            assertEquals(url, actual.text("highlight-management-export-result"))
+            assertEquals(summary, actual.text("highlight-management-export-summary"))
+            assertTrue(actual.exists("highlight-management-export-result"))
             assertEquals("HighlightRules.json", uploadedName.get())
             val downloaded = URL(url).readText()
             assertEquals(uploaded.get(), downloaded)
@@ -510,7 +526,7 @@ class HighlightGroupUiTest {
             } finally {
                 bitmap.recycle()
             }
-            compose.onNodeWithTag("highlight-management-export-copy").performClick()
+            actual.click("highlight-management-export-copy")
             await {
                 var copied = false
                 scenario!!.onActivity { copied = clipboard.primaryClip?.getItemAt(0)?.text?.toString() == url }
@@ -553,8 +569,8 @@ class HighlightGroupUiTest {
     }
 
     private fun menu(tag: String) {
-        compose.onNodeWithTag("highlight-management-menu").performClick()
-        compose.onNodeWithTag(tag).performClick()
+        actual.click("highlight-management-menu")
+        actual.click(tag)
     }
 
     private fun filter(label: String) {
@@ -565,53 +581,42 @@ class HighlightGroupUiTest {
                 context.getString(R.string.no_group) -> "highlight-filter-ungrouped"
                 else -> "highlight-filter-${label.removePrefix("[").removeSuffix("]")}"
             }
-        compose
-            .onNodeWithTag("highlight-management-filter-list")
-            .performScrollToNode(hasTestTag(tag))
-        compose.onNodeWithTag(tag).performClick()
+        actual.reveal(tag)
+        actual.click(tag)
     }
 
     private fun groupAction(group: String, editing: Boolean = false) {
         awaitGroup(group)
         val tag = if (editing) "highlight-group-edit-$group" else "highlight-group-delete-$group"
-        compose.onNodeWithTag(tag).performClick()
+        actual.click(tag)
     }
 
     private fun awaitGroup(group: String) {
-        compose.waitUntil(15_000) {
-            compose
-                .onAllNodesWithTag("highlight-group-label-$group")
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
+        actual.await15("actual group label") { actual.exists("highlight-group-label-$group") }
     }
 
     private fun awaitRules(expected: List<HighlightRule>) {
-        compose.waitUntil(15_000) {
+        actual.await15("native visible highlight rules") {
             var matches = false
-            scenario!!.onActivity { activity ->
-                matches =
-                    activity.viewModel.state.value.visible.map { it.uuid } ==
-                        expected.map { it.uuid }
-            }
+            scenario!!.onActivity { matches = it.viewModel.state.value.visible.map { row -> row.uuid } == expected.map { row -> row.uuid } }
             matches
         }
         expected.forEach { rule ->
-            compose
-                .onNodeWithTag("highlight-management-list")
-                .performScrollToNode(hasTestTag("highlight-management-row-${rule.uuid}"))
-            val label =
-                rule.group?.takeIf { it.isNotBlank() }?.let { "[$it] ${rule.getDisplayName()}" }
-                    ?: rule.getDisplayName()
-            compose.onNodeWithTag("highlight-management-name-${rule.uuid}").assertTextEquals(label)
-            compose
-                .onNodeWithTag("highlight-management-enabled-${rule.uuid}")
-                .assert(
-                    SemanticsMatcher.expectValue(
-                        SemanticsProperties.ToggleableState,
-                        if (rule.isEnabled) ToggleableState.On else ToggleableState.Off,
-                    )
-                )
+            actual.reveal("highlight-management-row-${rule.uuid}")
+            val label = rule.group?.takeIf { it.isNotBlank() }?.let { "[$it] ${rule.getDisplayName()}" } ?: rule.getDisplayName()
+            actual.await15("actual label and switch match native row", diagnostic = {
+                var native = "not sampled"
+                scenario!!.onActivity { host ->
+                    val current = host.viewModel.state.value
+                    native = "loaded=${current.loaded},rowsReady=${current.rowsReady},busy=${current.busy},canAct=${current.canAct}," +
+                        "visibleIndex=${current.visible.indexOfFirst { it.uuid == rule.uuid }}"
+                }
+                "expectedLength=${label.length},expectedEnabled=${rule.isEnabled},native=[$native]," +
+                    "label=[${actual.diagnostic("highlight-management-name-${rule.uuid}", label)}]," +
+                    "switch=[${actual.diagnostic("highlight-management-enabled-${rule.uuid}")}]"
+            }) {
+                actual.text("highlight-management-name-${rule.uuid}") == label && actual.checked("highlight-management-enabled-${rule.uuid}", rule.isEnabled)
+            }
         }
     }
 

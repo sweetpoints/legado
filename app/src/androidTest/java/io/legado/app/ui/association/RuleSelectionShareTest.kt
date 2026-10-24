@@ -76,33 +76,40 @@ class RuleSelectionShareTest {
         var sharedUri: Uri? = null
         try {
             var json = ""
-            runAndroidComposeUiTest<HighlightRuleActivity> {
-                waitUntil(timeoutMillis = 15_000) {
-                    activity?.viewModel?.state?.value?.rules.orEmpty().any { it.uuid == rule.uuid }
+            RuleShareUiProbe().use { ui ->
+              ActivityScenario.launch(HighlightRuleActivity::class.java).use { scenario ->
+                ui.await15("highlight rows ready") {
+                    var ready = false
+                    scenario.onActivity {
+                        val state = it.viewModel.state.value
+                        ready = state.canAct && state.rules.any { row -> row.uuid == rule.uuid }
+                    }
+                    ready
                 }
-                onNodeWithTag("highlight-management-selection-menu").assertIsNotEnabled()
+                ui.await15("empty highlight selection disables share menu") {
+                    ui.actual("highlight-management-selection-menu") { !it.isEnabled }
+                }
                 assertNull(chooser.get())
-                onNodeWithTag("highlight-management-list")
-                    .performScrollToNode(hasTestTag("highlight-management-select-${rule.uuid}"))
-                onNodeWithTag("highlight-management-select-${rule.uuid}")
-                    .performClick()
-                    .assertIsOn()
-                onNodeWithTag("highlight-management-selection-menu").performClick()
-                onNodeWithTag("highlight-management-share").performClick()
-                waitUntil(timeoutMillis = 15_000) { chooser.get() != null }
+                ui.reveal("highlight-management-select-${rule.uuid}", "highlight-management-list")
+                ui.click("highlight-management-select-${rule.uuid}")
+                ui.await15("highlight selection acknowledged by actual control and native state") {
+                    var selected = false
+                    scenario.onActivity { selected = it.viewModel.state.value.draft.selection == setOf(rule.uuid) }
+                    selected && ui.actual("highlight-management-select-${rule.uuid}") { it.isCheckable && it.isChecked }
+                }
+                ui.click("highlight-management-selection-menu")
+                ui.click("highlight-management-share")
+                ui.await15("highlight chooser") { chooser.get() != null }
                 @Suppress("DEPRECATION")
-                val send =
-                    checkNotNull(chooser.get()).getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+                val send = checkNotNull(chooser.get()).getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
                 assertEquals(Intent.ACTION_SEND, send.action)
                 assertTrue(send.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
                 @Suppress("DEPRECATION")
                 val uri = checkNotNull(send.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
                 sharedUri = uri
                 assertEquals("content", uri.scheme)
-                json =
-                    context.contentResolver.openInputStream(uri)!!.bufferedReader().use {
-                        it.readText()
-                    }
+                json = context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
+              }
             }
             val restored = GSON.fromJson(json, HighlightRuleFile::class.java)
             assertEquals(HighlightRuleFile.TYPE, restored.type)
@@ -243,23 +250,33 @@ class RuleSelectionShareTest {
             var sharedUri: Uri? = null
             var json = ""
             try {
-                runAndroidComposeUiTest<TxtTocRuleActivity> {
-                    waitUntil(timeoutMillis = 15000) {
-                        val rows = activity?.viewModel?.state?.value?.rules.orEmpty()
-                        rows.any { it.id == rule.id } && rows.any { it.id == other.id }
+                RuleShareUiProbe().use { ui ->
+                  ActivityScenario.launch(TxtTocRuleActivity::class.java).use { scenario ->
+                    ui.await15("TXT TOC rows ready") {
+                        var ready = false
+                        scenario.onActivity {
+                            val state = it.viewModel.state.value
+                            ready = !state.loading && !state.busy &&
+                                state.rules.any { row -> row.id == rule.id } && state.rules.any { row -> row.id == other.id }
+                        }
+                        ready
                     }
-                    onNodeWithTag("txt-toc-selection-menu").assertIsNotEnabled()
+                    ui.await15("empty TXT TOC selection disables share menu") {
+                        ui.actual("txt-toc-selection-menu") { !it.isEnabled }
+                    }
                     assertNull("Empty selection must not launch a share", chooser.get())
-                    onNodeWithTag("txt-toc-list")
-                        .performScrollToNode(hasTestTag("txt-toc-select-${rule.id}"))
-                    onNodeWithTag("txt-toc-select-${rule.id}").performClick().assertIsOn()
-                    onNodeWithTag("txt-toc-selection-menu").performClick()
-                    onNodeWithTag("txt-toc-share").performClick()
-                    waitUntil(timeoutMillis = 15000) { chooser.get() != null }
+                    ui.reveal("txt-toc-select-${rule.id}", "txt-toc-list")
+                    ui.click("txt-toc-select-${rule.id}")
+                    ui.await15("TXT TOC selection acknowledged by actual control and native state") {
+                        var selected = false
+                        scenario.onActivity { selected = it.viewModel.state.value.selected == setOf(rule.id) }
+                        selected && ui.actual("txt-toc-select-${rule.id}") { it.isCheckable && it.isChecked }
+                    }
+                    ui.click("txt-toc-selection-menu")
+                    ui.click("txt-toc-share")
+                    ui.await15("TXT TOC chooser") { chooser.get() != null }
                     @Suppress("DEPRECATION")
-                    val intent =
-                        checkNotNull(chooser.get())
-                            .getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+                    val intent = checkNotNull(chooser.get()).getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
                     assertEquals(Intent.ACTION_SEND, intent.action)
                     assertEquals("text/*", intent.type)
                     assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
@@ -267,10 +284,8 @@ class RuleSelectionShareTest {
                     val uri = checkNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
                     sharedUri = uri
                     assertEquals("content", uri.scheme)
-                    json =
-                        context.contentResolver.openInputStream(uri)!!.bufferedReader().use {
-                            it.readText()
-                        }
+                    json = context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
+                  }
                 }
             } finally {
                 instrumentation.removeMonitor(monitor)
@@ -404,4 +419,61 @@ class RuleSelectionShareTest {
             appDb.dictRuleDao.delete(rule, other)
         }
     }
+}
+
+
+/** Actual Flutter selection/share controls; existing business waits retain their 15 second budget. */
+private class RuleShareUiProbe : AutoCloseable {
+    private val driver = FlutterUiTestDriver(InstrumentationRegistry.getInstrumentation())
+    init { driver.enableAccessibility() }
+    fun await15(description: String, condition: () -> Boolean) {
+        val deadline = SystemClock.uptimeMillis() + 15_000
+        while (SystemClock.uptimeMillis() < deadline) {
+            if (condition()) return
+            SystemClock.sleep(50)
+        }
+        assertTrue("Timed out waiting for $description", condition())
+    }
+    fun actual(id: String, condition: (AccessibilityNodeInfo) -> Boolean): Boolean {
+        val pending = ArrayDeque<AccessibilityNodeInfo>()
+        driver.node(id)?.let(pending::add) ?: return false
+        var found = false
+        while (pending.isNotEmpty()) {
+            val node = pending.removeFirst()
+            if (node.isVisibleToUser && condition(node)) found = true
+            for (index in 0 until node.childCount) node.getChild(index)?.let(pending::add)
+            node.recycle()
+        }
+        return found
+    }
+    @Suppress("DEPRECATION")
+    fun click(id: String) {
+        var target: AccessibilityNodeInfo? = null
+        await15("actual clickable $id") {
+            actual(id) { node ->
+                if (target == null && node.isEnabled && node.isClickable &&
+                    node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }) {
+                    target = AccessibilityNodeInfo.obtain(node)
+                }
+                target != null
+            }
+        }
+        checkNotNull(target).let { node ->
+            try { assertTrue("Single selection/share action rejected: $id", node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) }
+            finally { node.recycle() }
+        }
+    }
+    fun reveal(id: String, list: String) = await15("visible selection control $id") {
+        driver.node(id)?.let { it.recycle(); return@await15 true }
+        var scrolled = false
+        actual(list) { node ->
+            if (!scrolled && node.isEnabled && node.isScrollable &&
+                node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD })
+                scrolled = node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            false
+        }
+        if (scrolled) SystemClock.sleep(150)
+        false
+    }
+    override fun close() = driver.close()
 }

@@ -172,6 +172,14 @@ class HighlightManagementViewModel(
         if (state.value.draft.revision == draft.revision) dirty = false
     }
 
+    fun scroll(index: Int, offset: Double) {
+        require(index >= 0 && offset.isFinite() && offset >= 0 && offset < 80.0)
+        if (!state.value.loaded || state.value.closed) return
+        val visibleIndex = index.coerceAtMost((state.value.visible.size - 1).coerceAtLeast(0))
+        if (state.value.draft.scrollIndex == visibleIndex && state.value.draft.scrollOffset == offset) return
+        edit { copy(scrollIndex = visibleIndex, scrollOffset = offset) }
+    }
+
     fun filter(group: String?) {
         if (!state.value.canAct) return
         cancelGesture()

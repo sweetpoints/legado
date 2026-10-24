@@ -1,0 +1,11 @@
+{
+  "namedGroupsTitle": "Group management",
+  "namedGroupsAdd": "Add group",
+  "namedGroupsEdit": "Edit",
+  "namedGroupsDelete": "Delete",
+  "namedGroupsName": "Group name",
+  "namedGroupsConfirm": "OK",
+  "namedGroupsCancel": "Cancel",
+  "namedGroupsRetry": "Retry",
+  "namedGroupsError": "Group operation failed"
+}

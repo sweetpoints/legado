@@ -488,6 +488,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String get highlightEditorDiscard => 'Discard changes';
 
   @override
+  String get highlightManagerUnavailable =>
+      'Highlight operation could not be completed. Retry or cancel.';
+
+  @override
+  String get namedGroupsTitle => 'Group management';
+
+  @override
+  String get namedGroupsAdd => 'Add group';
+
+  @override
+  String get namedGroupsEdit => 'Edit';
+
+  @override
+  String get namedGroupsDelete => 'Delete';
+
+  @override
+  String get namedGroupsName => 'Group name';
+
+  @override
+  String get namedGroupsConfirm => 'OK';
+
+  @override
+  String get namedGroupsCancel => 'Cancel';
+
+  @override
+  String get namedGroupsRetry => 'Retry';
+
+  @override
+  String get namedGroupsError => 'Group operation failed';
+
+  @override
   String get pdfTitle => 'PDF reader';
 
   @override
@@ -1620,6 +1651,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String sourcesPage(int page) {
     return 'Page $page';
   }
+
+  @override
+  String get txtTocManagerTitle => 'TXT TOC rules';
+
+  @override
+  String get txtTocManagerBridgeError =>
+      'Change not acknowledged. Edit again or retry.';
 
   @override
   String get txtTocEditorTitle => 'TXT TOC rule';

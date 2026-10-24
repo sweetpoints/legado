@@ -177,8 +177,9 @@ class HighlightRuleEditorHostTest {
                     }
                     available
                 }
-                compose.onNodeWithTag("highlight-management-edit-${original.uuid}")
-                    .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+                val manager = io.legado.app.ui.highlight.HighlightManagerUiProbe(driver, InstrumentationRegistry.getInstrumentation())
+                manager.reveal("highlight-management-edit-${original.uuid}")
+                manager.click("highlight-management-edit-${original.uuid}")
                 awaitEntry("native editor fragment after single manager edit click") {
                     sampleEntry()?.isAdded == true
                 }
