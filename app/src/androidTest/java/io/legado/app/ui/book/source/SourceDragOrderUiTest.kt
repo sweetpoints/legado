@@ -813,9 +813,40 @@ class SourceDragOrderUiTest {
             var returned = false
             flutter.touchDown(x, first.exactCenterY()).use { pointer ->
                 pointer.hold(ViewConfiguration.getLongPressTimeout().toLong() + 150)
-                pointer.moveTo(x, last.exactCenterY() + last.height() / 4f, 500)
+                // A wall-clock hold is not a Flutter/native beginDrag acknowledgement.
+                // Keep this real pointer still until the native drag starts. Recognition,
+                // movement and the original held-preview assertion share one 30s budget.
+                val deadline = SystemClock.uptimeMillis() + 30_000
+                var receipt = "no native replacement drag receipt"
+                fun awaitHeld(description: String, condition: () -> Boolean) {
+                    while (SystemClock.uptimeMillis() < deadline) {
+                        if (condition()) return
+                        SystemClock.sleep(minOf(50L,
+                            (deadline - SystemClock.uptimeMillis()).coerceAtLeast(0)))
+                    }
+                    val matched = condition()
+                    assertTrue("$description; $receipt", matched)
+                }
+                fun nativeMatches(expectedOrder: List<String>? = null): Boolean {
+                    var matched = false
+                    scenario.onActivity { activity ->
+                        val state = (activity as ReplaceRuleActivity).managementModel.state.value
+                        val dragging = state.dragging?.toString() == original.first()
+                        val rows = state.rows.map { it.id.toString() }
+                        receipt = "nativeDraggingMatches=$dragging,loaded=${state.loaded},busy=${state.busy}," +
+                            "rowCount=${rows.size},fixtureOrder=${rows.take(4).map(original::indexOf)}," +
+                            "viewport=${activity.window.decorView.width}x${activity.window.decorView.height}"
+                        matched = dragging && (expectedOrder == null || rows == expectedOrder)
+                    }
+                    return matched
+                }
                 try {
-                    awaitItems(kind, scenario, original.drop(1) + original.first())
+                    awaitHeld("Native replacement drag begins before movement") { nativeMatches() }
+                    pointer.moveTo(x, last.exactCenterY() + last.height() / 4f, 500)
+                    val expected = original.drop(1) + original.first()
+                    awaitHeld("visible $kind order $expected") {
+                        nativeMatches(expected) && renderedOrderMatches(kind, expected)
+                    }
                     whileHeld()
                     if (returnToStart) {
                         pointer.moveTo(x, first.exactCenterY() - first.height() / 4f, 500)
@@ -823,7 +854,16 @@ class SourceDragOrderUiTest {
                         returned = true
                     }
                 } catch (failure: Throwable) {
-                    screenshot("drag-held-failure-${SystemClock.uptimeMillis()}")
+                    runCatching {
+                        val heldBounds = original.map { id ->
+                            flutter.node("replace-rule-row-$id")?.let { node ->
+                                android.graphics.Rect().also { node.getBoundsInScreen(it); node.recycle() }
+                            }
+                        }
+                        failure.addSuppressed(AssertionError("$receipt; expectedStart=$first,target=$last,heldBounds=$heldBounds"))
+                    }.exceptionOrNull()?.let(failure::addSuppressed)
+                    runCatching { screenshot("drag-held-failure-${SystemClock.uptimeMillis()}") }
+                        .exceptionOrNull()?.let(failure::addSuppressed)
                     throw failure
                 }
             }
