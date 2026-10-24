@@ -39,6 +39,8 @@ data class HighlightManagementDraft(
     val exporting: String? = null,
     val exportResult: String? = null,
     val revision: Long = 0,
+    val scrollIndex: Int = 0,
+    val scrollOffset: Double = 0.0,
 )
 
 interface HighlightManagementSessionRepository {

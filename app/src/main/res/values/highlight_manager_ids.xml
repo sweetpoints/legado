@@ -1,0 +1,4 @@
+<resources>
+    <item name="highlight_manager_flutter_content" type="id" />
+    <item name="highlight_groups_flutter_content" type="id" />
+</resources>
