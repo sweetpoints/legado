@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 /** Full immutable projection: UI selection and drag never mutate Room entities. */
+@androidx.annotation.Keep
 data class HighlightManagedRule(
     val id: Long,
     val uuid: String,
