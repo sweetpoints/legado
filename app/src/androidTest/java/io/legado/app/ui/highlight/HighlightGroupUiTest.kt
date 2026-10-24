@@ -12,6 +12,7 @@ import android.os.SystemClock
 import android.view.PixelCopy
 import android.view.View
 import android.view.Window
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inspector.WindowInspector
 import android.view.KeyEvent
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -47,6 +48,8 @@ import io.legado.app.help.HighlightStyle
 import io.legado.app.help.IntentData
 import io.legado.app.ui.file.HandleFileActivity
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.flutter.FlutterUiTestDriver
+import io.legado.app.ui.highlight.edit.HighlightRuleEditDialog
 import io.legado.app.utils.GSON
 import io.legado.app.utils.defaultSharedPreferences
 import java.io.File
@@ -66,6 +69,7 @@ import org.junit.runner.RunWith
 class HighlightGroupUiTest {
     @get:Rule val compose = createEmptyComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private val flutter = FlutterUiTestDriver(instrumentation)
     private val context = instrumentation.targetContext
     private val dao = appDb.highlightRuleDao
     private val namedUngrouped = context.getString(R.string.no_group)
@@ -106,8 +110,65 @@ class HighlightGroupUiTest {
     @After
     fun cleanUp() {
         scenario?.close()
+        flutter.close()
         dao.deleteAll()
         if (savedRules.isNotEmpty()) dao.insert(*savedRules.toTypedArray())
+    }
+
+    /** Search only the actual Flutter node/descendants; never a clickable ancestor. */
+    private fun flutterClickNode(id: String): AccessibilityNodeInfo? {
+        val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
+        flutter.node(id)?.let(pending::add) ?: return null
+        while (pending.isNotEmpty()) {
+            val node = pending.removeFirst()
+            if (node.isVisibleToUser && node.isEnabled && node.isClickable &&
+                node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }) {
+                pending.forEach { it.recycle() }
+                return node
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let(pending::add)
+            node.recycle()
+        }
+        return null
+    }
+    private fun awaitFlutterEditorSave() {
+        flutter.enableAccessibility()
+        // Retain the old default 1000ms deadline, but inspect the migrated Flutter UI.
+        compose.waitUntil {
+            var editable = false
+            scenario!!.onActivity { host ->
+                val editor = host.supportFragmentManager.fragments.filterIsInstance<HighlightRuleEditDialog>().singleOrNull()
+                editable = editor?.viewModel?.state?.value?.let { state ->
+                    !state.loading && !state.saving && !state.finished && state.draft != null
+                } == true
+            }
+            editable && flutterClickNode("highlight-rule-save")?.let { it.recycle(); true } == true
+        }
+    }
+    private fun clickFlutterEditorStyle() {
+        // Real Android scrolling replaces the removed Compose editor's performScrollTo.
+        // The retained native style sheet continues to use its original Compose checks.
+        compose.waitUntil {
+            flutterClickNode("highlight-rule-style")?.let { it.recycle(); return@waitUntil true }
+            val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
+            instrumentation.uiAutomation.rootInActiveWindow?.let(pending::add)
+            var scrolled = false
+            while (pending.isNotEmpty()) {
+                val node = pending.removeFirst()
+                if (!scrolled && node.isVisibleToUser && node.isEnabled && node.isScrollable)
+                    scrolled = node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                for (i in 0 until node.childCount) node.getChild(i)?.let(pending::add)
+                node.recycle()
+            }
+            false
+        }
+        val style = checkNotNull(flutterClickNode("highlight-rule-style"))
+        try { assertTrue(style.performAction(AccessibilityNodeInfo.ACTION_CLICK)) } finally { style.recycle() }
+    }
+    private fun clickFlutterEditorSave() {
+        awaitFlutterEditorSave()
+        val save = checkNotNull(flutterClickNode("highlight-rule-save"))
+        try { assertTrue(save.performAction(AccessibilityNodeInfo.ACTION_CLICK)) } finally { save.recycle() }
     }
 
     @Test
@@ -125,12 +186,8 @@ class HighlightGroupUiTest {
                     "highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}"
                 )
                 .performClick()
-            compose.waitUntil {
-                compose.onAllNodesWithTag("highlight-rule-save").fetchSemanticsNodes().any {
-                    !it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
-                }
-            }
-            compose.onNodeWithTag("highlight-rule-style").performScrollTo().performClick()
+            awaitFlutterEditorSave()
+            clickFlutterEditorStyle()
             compose.waitUntil(timeoutMillis = 10_000) {
                 compose.onAllNodesWithTag("highlight-style-font-size")
                     .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
@@ -182,7 +239,7 @@ class HighlightGroupUiTest {
         }
         fun save() {
             pressBack()
-            compose.onNodeWithTag("highlight-rule-save").performClick()
+            clickFlutterEditorSave()
         }
         openStyle()
         edit("highlight-style-font-size", 42)
@@ -219,16 +276,12 @@ class HighlightGroupUiTest {
                     "highlight-management-edit-${dao.all.first { it.name == "Alice" }.uuid}"
                 )
                 .performClick()
-            compose.waitUntil {
-                compose.onAllNodesWithTag("highlight-rule-save").fetchSemanticsNodes().any {
-                    !it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
-                }
-            }
-            compose.onNodeWithTag("highlight-rule-style").performScrollTo().performClick()
+            awaitFlutterEditorSave()
+            clickFlutterEditorStyle()
         }
         fun saveStyle() {
             pressBack()
-            compose.onNodeWithTag("highlight-rule-save").performClick()
+            clickFlutterEditorSave()
         }
         openStyle()
         compose

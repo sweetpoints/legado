@@ -182,9 +182,32 @@ class HighlightRuleEditorHostTest {
                 awaitEntry("native editor fragment after single manager edit click") {
                     sampleEntry()?.isAdded == true
                 }
-                awaitEntry("rendered Flutter highlight-rule-name after manager entry") {
-                    sampleEntry()
-                    driver.node("highlight-rule-name")?.let { it.recycle(); true } ?: false
+                awaitEntry("editable Flutter name and actual Dialog input frame after manager entry") {
+                    val dialog = sampleEntry() ?: return@awaitEntry false
+                    var nativeReady = false
+                    scenario.onActivity {
+                        val state = dialog.viewModel.state.value
+                        nativeReady = !state.loading && !state.saving && !state.finished && state.draft != null &&
+                            dialog.dialog?.window?.decorView?.hasWindowFocus() == true
+                    }
+                    if (!nativeReady) return@awaitEntry false
+                    fun actualInputBounds(): android.graphics.Rect? = driver.node("highlight-rule-name")?.let { node ->
+                        try {
+                            if (node.isVisibleToUser && node.isEditable && node.isEnabled && node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
+                                android.graphics.Rect().also(node::getBoundsInScreen)
+                            else null
+                        } finally { node.recycle() }
+                    }
+                    val before = actualInputBounds() ?: return@awaitEntry false
+                    val frame = java.util.concurrent.CountDownLatch(1)
+                    scenario.onActivity {
+                        val decor = checkNotNull(dialog.dialog?.window?.decorView)
+                        decor.viewTreeObserver.registerFrameCommitCallback { frame.countDown() }
+                        decor.postInvalidateOnAnimation()
+                    }
+                    if (!frame.await((entryDeadline - SystemClock.uptimeMillis()).coerceAtLeast(0), java.util.concurrent.TimeUnit.MILLISECONDS))
+                        return@awaitEntry false
+                    actualInputBounds() == before
                 }
                 driver.setText("highlight-rule-name", "Edited")
                 reveal("highlight-rule-group"); driver.setText("highlight-rule-group", " New group ")
