@@ -10,7 +10,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import io.legado.app.data.repository.TxtTocRuleSnapshot
 
 @Composable
-fun TxtTocRuleEditorRoute(
+fun LegacyTxtTocRuleEditorRoute(
     model: TxtTocRuleEditorViewModel,
     onCode: (TxtTocEditorCodeRequest) -> Unit,
     onCopy: (String) -> Unit,
@@ -37,15 +37,15 @@ fun TxtTocRuleEditorRoute(
             }
         }
     }
-    TxtTocRuleEditorScreen(
+    LegacyTxtTocRuleEditorScreen(
         state,
-        model::setInput,
+        { field, text, cursor -> model.setInput(field, text, cursor) },
         model::focus,
         { model.codeRequest()?.let(onCode) ?: onNoFocus() },
         model::save,
         { onCopy(model.copyJson()) },
         { model.paste(onPaste()) },
-        model::requestClose,
+        { model.requestClose() },
         model::keepEditing,
         model::discard,
         model::load,
