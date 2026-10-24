@@ -161,6 +161,10 @@ void main() {
   });
 
   for (final route in [
+    '/replace-manager',
+    '/highlight-rule-editor',
+    '/highlight-rule-color-picker',
+    '/txt-toc-rule-editor',
     '/dictionary-rule-editor',
     '/dictionary-manager',
     '/replace-editor',

@@ -10,6 +10,10 @@ import '../app/theme.dart';
 import '../features/sources/source_management_page.dart';
 import '../l10n/generated/app_localizations.dart';
 import 'replace_editor/replace_editor_page.dart';
+import 'replace_manager/replace_manager_page.dart';
+import 'highlight_rule_editor/highlight_rule_editor_page.dart';
+import 'highlight_rule_editor/highlight_color_picker_page.dart';
+import 'txt_toc_rule_editor/txt_toc_rule_editor_page.dart';
 import 'source_management_backend.dart';
 import 'source_manager/source_manager_page.dart';
 import 'source_editor/source_editor_page.dart';
@@ -42,6 +46,10 @@ Future<EmbeddedSourceConfiguration> embeddedSourceConfiguration(Ref ref) async {
       .invokeMapMethod<String, Object?>('bootstrap');
   if (result == null ||
       ![
+        '/replace-manager',
+        '/highlight-rule-editor',
+        '/highlight-rule-color-picker',
+        '/txt-toc-rule-editor',
         '/replace-editor',
         '/sources',
         '/source-manager',
@@ -84,6 +92,22 @@ GoRouter embeddedSourceRouter(Ref ref) {
     restorationScopeId: 'embedded-router',
     initialLocation: configuration.route,
     routes: [
+      GoRoute(
+        path: '/replace-manager',
+        builder: (_, _) => const ReplaceManagerPage(),
+      ),
+      GoRoute(
+        path: '/highlight-rule-editor',
+        builder: (_, _) => const HighlightRuleEditorPage(),
+      ),
+      GoRoute(
+        path: '/highlight-rule-color-picker',
+        builder: (_, _) => const HighlightColorPickerPage(),
+      ),
+      GoRoute(
+        path: '/txt-toc-rule-editor',
+        builder: (_, _) => const TxtTocRuleEditorPage(),
+      ),
       GoRoute(
         path: '/dictionary-rule-editor',
         builder: (_, _) => const DictionaryRuleEditorPage(),
