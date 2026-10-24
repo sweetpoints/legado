@@ -1,6 +1,8 @@
 package io.legado.app.ui.group
 
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Bundle
@@ -11,6 +13,7 @@ import android.view.PixelCopy
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.view.inputmethod.InputMethodManager
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -38,6 +41,7 @@ internal class NamedGroupsFlutterRobot(private val scenario: ActivityScenario<Ab
         scenario.onActivity { dialog = it.supportFragmentManager.fragments.filterIsInstance<NamedGroupDialog>().singleOrNull() }
         return requireNotNull(dialog)
     }
+    private var inputRoot: View? = null
     fun ready() {
         driver.await("Normal native group host and Flutter add action ready") {
             var ready = false
@@ -46,6 +50,12 @@ internal class NamedGroupsFlutterRobot(private val scenario: ActivityScenario<Ab
                 ready = host?.model?.state?.value?.let { state -> !state.loading && !state.busy } == true
             }
             ready && driver.node("named-group-add")?.let { n -> try { n.isEnabled } finally { n.recycle() } } == true
+        }
+        captureInputWindow()
+    }
+    private fun captureInputWindow() {
+        scenario.onActivity {
+            inputRoot = requireNotNull(host().dialog?.window?.decorView)
         }
     }
     @Suppress("DEPRECATION")
@@ -112,12 +122,81 @@ internal class NamedGroupsFlutterRobot(private val scenario: ActivityScenario<Ab
             else { node.recycle(); null }
     }
     fun input(text: String) {
+        // A focused semantics node can precede the platform input connection and IME
+        // resize. Keep the original 30s readiness budget, observe that boundary, then
+        // obtain a fresh node. Never retry SET_TEXT after a missing acknowledgement.
+        val deadline = SystemClock.uptimeMillis() + 30_000
+        captureInputWindow()
+        val generation = host().coordinator.generation
+        fun within(message: String, condition: () -> Boolean) {
+            while (SystemClock.uptimeMillis() < deadline) {
+                if (condition()) return
+                SystemClock.sleep(minOf(50L, (deadline - SystemClock.uptimeMillis()).coerceAtLeast(0)))
+            }
+            assertTrue(message, condition())
+        }
+        fun initialField(): AccessibilityNodeInfo? {
+            var native: NamedGroupState? = null
+            scenario.onActivity {
+                val host = it.supportFragmentManager.fragments.filterIsInstance<NamedGroupDialog>().singleOrNull()
+                if (host?.coordinator?.generation == generation) native = host.model.state.value
+            }
+            val state = native ?: return null
+            val candidate = editable() ?: return null
+            val ready = state.editing && !state.loading && !state.busy &&
+                candidate.isVisibleToUser && candidate.text?.toString().orEmpty() == state.name &&
+                candidate.textSelectionStart == state.selectionStart && candidate.textSelectionEnd == state.selectionEnd
+            return if (ready) candidate else { candidate.recycle(); null }
+        }
+        within("Initial native and actual named group editor not ready") {
+            initialField()?.let { it.recycle(); true } == true
+        }
+        fun viewport(): List<Int>? {
+            var value: List<Int>? = null
+            instrumentation.runOnMainSync {
+                val root = inputRoot ?: return@runOnMainSync
+                val configuration = root.resources.configuration
+                val hardwareKeyboard = configuration.keyboard != Configuration.KEYBOARD_NOKEYS &&
+                    configuration.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
+                val acceptingText = (root.context.getSystemService(Context.INPUT_METHOD_SERVICE)
+                    as? InputMethodManager)?.isAcceptingText == true
+                val insets = ViewCompat.getRootWindowInsets(root)
+                val imeVisible = insets?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                if (root.isAttachedToWindow && root.isLaidOut && !root.isLayoutRequested &&
+                    root.hasWindowFocus() && acceptingText && (imeVisible || hardwareKeyboard)) {
+                    value = listOf(root.width, root.height,
+                        insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0,
+                        if (imeVisible) 1 else 0)
+                }
+            }
+            return value
+        }
         var field: AccessibilityNodeInfo? = null
-        driver.await("Focused named group input") { field = editable(); field != null }
+        while (field == null && SystemClock.uptimeMillis() < deadline) {
+            within("Named group input connection and owned viewport not ready") { viewport() != null }
+            val before = viewport() ?: continue
+            val turns = CountDownLatch(1)
+            instrumentation.runOnMainSync {
+                // Observe natural animation turns only. Do not invalidate, request layout,
+                // hide the IME, or replace the host's insets/animation callbacks.
+                requireNotNull(inputRoot).postOnAnimation {
+                    inputRoot?.postOnAnimation { turns.countDown() }
+                }
+            }
+            assertTrue("Named group input viewport exceeded original readiness budget",
+                turns.await((deadline - SystemClock.uptimeMillis()).coerceAtLeast(0), TimeUnit.MILLISECONDS))
+            if (viewport() == before) field = initialField()
+        }
+        assertNotNull("Fresh same-generation named group input not ready within original budget", field)
         val node = requireNotNull(field)
-        try { assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-        })) } finally { node.recycle() }
+        try {
+            android.util.Log.i("NamedGroupsInput", "singleSetText uptime=${SystemClock.uptimeMillis()}," +
+                "beforeLength=${node.text?.length},selection=${node.textSelectionStart}..${node.textSelectionEnd}," +
+                "expectedLength=${text.length},windowId=${node.windowId},generation=$generation")
+            assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+            }))
+        } finally { node.recycle() }
         assertName(text)
     }
     fun select(start: Int, end: Int) {
@@ -402,5 +481,5 @@ internal class NamedGroupsFlutterRobot(private val scenario: ActivityScenario<Ab
     }
 
     private fun rectangle(rect: Rect) = JSONArray(listOf(rect.left, rect.top, rect.right, rect.bottom))
-    override fun close() { driver.close() }
+    override fun close() { inputRoot = null; driver.close() }
 }
