@@ -262,8 +262,36 @@ internal class NamedGroupsFlutterRobot(private val scenario: ActivityScenario<Ab
             report.put("captureFinishedUptime", SystemClock.uptimeMillis())
             File(directory, "$stamp.json").writeText(report.toString(2))
         }
+        // CI retrieves only this app's ui-regression external directory. Export only
+        // this failed capture, after the original service flags have been restored.
+        var externalEvidence = "not-exported"
+        try {
+            check(report.optBoolean("serviceFlagsRestored")) { "Original service flags were not restored" }
+            val root = instrumentation.targetContext.getExternalFilesDir("ui-regression")
+                ?: error("UI regression directory unavailable")
+            val export = File(root, "named-group-failure")
+            check(export.isDirectory || export.mkdirs())
+            val files = JSONArray()
+            val screenshot = report.getJSONObject("screenshot")
+            val png = File(directory, "$stamp.png")
+            if (screenshot.optString("file") == "cache/named-group-failure/$stamp.png" && png.isFile) {
+                png.copyTo(File(export, png.name), overwrite = false)
+                files.put(png.name)
+            }
+            files.put("$stamp.json")
+            report.put("externalExport", JSONObject().put("directory", "ui-regression/named-group-failure")
+                .put("files", files))
+            val scalar = File(directory, "$stamp.json")
+            scalar.writeText(report.toString(2))
+            scalar.copyTo(File(export, scalar.name), overwrite = false)
+            externalEvidence = "ui-regression/named-group-failure/$stamp.json"
+        } catch (failure: Exception) {
+            report.put("externalExportError", failure.javaClass.simpleName)
+            File(directory, "$stamp.json").writeText(report.toString(2))
+        }
         return "cache/named-group-failure/$stamp.json; screenshot=" +
-            (report.getJSONObject("screenshot").optString("file", "not-created"))
+            (report.getJSONObject("screenshot").optString("file", "not-created")) +
+            "; external=$externalEvidence"
     }
 
     private fun copyOwnedWindow(window: Window?, decor: View?, file: File): JSONObject {
