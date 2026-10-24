@@ -375,13 +375,66 @@ class ReplaceEditorHostTest {
         launch(rule)
         driver.setText("replace-editor-Name", "Draft")
         driver.await("draft ACK") { model.state.value.draft[ReplaceEditorField.Name].text == "Draft" }
+        fun within(deadline: Long, description: String, condition: () -> Boolean) {
+            while (SystemClock.uptimeMillis() < deadline) {
+                if (condition()) return
+                SystemClock.sleep(50)
+            }
+            assertTrue("Timed out waiting for $description within original 30s transition budget", condition())
+        }
+        fun ownedButton(identifier: String): AccessibilityNodeInfo? {
+            val root = driver.node(identifier) ?: return null
+            if (!root.refresh() || root.viewIdResourceName != identifier) { root.recycle(); return null }
+            val pending = ArrayDeque<AccessibilityNodeInfo>()
+            pending.add(root)
+            while (pending.isNotEmpty()) {
+                val node = pending.removeFirst()
+                if (!node.refresh()) { node.recycle(); continue }
+                if (node.isVisibleToUser && node.isEnabled && node.isClickable &&
+                    node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }) {
+                    pending.forEach { it.recycle() }
+                    return node
+                }
+                for (index in 0 until node.childCount) node.getChild(index)?.let(pending::add)
+                node.recycle()
+            }
+            return null
+        }
+        fun clickOwnedOnce(identifier: String, deadline: Long) {
+            within(deadline, "native dirty confirmation and advertised $identifier") {
+                model.state.value.exit && ownedButton(identifier)?.let { it.recycle(); true } == true
+            }
+            val button = checkNotNull(ownedButton(identifier)) { "Owned confirmation action retired before dispatch" }
+            try {
+                check(SystemClock.uptimeMillis() <= deadline) { "Original confirmation transition deadline expired" }
+                assertTrue("Owned confirmation must accept its one advertised CLICK", button.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            } finally { button.recycle() }
+        }
+        val keepDeadline = SystemClock.uptimeMillis() + 30_000
         scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-        driver.click("replace-editor-keep")
+        clickOwnedOnce("replace-editor-keep", keepDeadline)
+        within(keepDeadline, "Keep native receipt, dismissed dialog, and actual draft field") {
+            val state = model.state.value
+            val keep = driver.node("replace-editor-keep")
+            val discard = driver.node("replace-editor-discard")
+            val field = driver.node("replace-editor-Name")
+            val dialogGone = keep == null && discard == null
+            keep?.recycle(); discard?.recycle()
+            val draftRendered = field?.let {
+                try {
+                    it.refresh() && it.viewIdResourceName == "replace-editor-Name" &&
+                        it.isVisibleToUser && it.isEditable && it.isEnabled && it.text?.toString() == "Draft"
+                } finally { it.recycle() }
+            } ?: false
+            !state.exit && !state.finished && state.draft[ReplaceEditorField.Name].text == "Draft" &&
+                dialogGone && draftRendered
+        }
         assertFalse(model.state.value.finished)
-        driver.await("draft ACK") { model.state.value.draft[ReplaceEditorField.Name].text == "Draft" }
+        assertEquals("Draft", model.state.value.draft[ReplaceEditorField.Name].text)
+        val discardDeadline = SystemClock.uptimeMillis() + 30_000
         scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-        driver.click("replace-editor-discard")
-        driver.await("discard finished") { model.state.value.finished }
+        clickOwnedOnce("replace-editor-discard", discardDeadline)
+        within(discardDeadline, "discard finished") { model.state.value.finished }
         assertFalse(model.state.value.saved)
         assertEquals(
             "Original",
