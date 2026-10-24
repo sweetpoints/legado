@@ -433,9 +433,13 @@ class SourceOrderMetadataUpdateTest {
                     }
                     return found
                 }
+                var candidateReasons = emptyList<String>()
                 fun freshSwitch(): android.view.accessibility.AccessibilityNodeInfo? {
+                    val reasons = mutableListOf<String>()
+                    candidateReasons = reasons
                     val root = ui.driver.node(switchIdentifier) ?: return null
                     if (!root.refresh() || root.viewIdResourceName != switchIdentifier) {
+                        reasons += "rootIdentity=false"
                         root.recycle(); return null
                     }
                     val pending = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
@@ -447,11 +451,19 @@ class SourceOrderMetadataUpdateTest {
                         var correctControl = false
                         var correctRow = false
                         var foreignIdentity = false
+                        val ancestorKinds = mutableListOf<String>()
                         var ancestor: android.view.accessibility.AccessibilityNodeInfo? = android.view.accessibility.AccessibilityNodeInfo.obtain(node)
                         while (ancestor != null) {
                             val current = ancestor
                             if (!current.refresh()) { current.recycle(); foreignIdentity = true; break }
                             val id = current.viewIdResourceName.orEmpty()
+                            ancestorKinds += when {
+                                id == switchIdentifier -> "control"
+                                id == rowIdentifier -> "row"
+                                id.startsWith("replace-rule-row-") -> "foreign-row"
+                                id.startsWith("replace-rule-enabled-") -> "foreign-control"
+                                else -> "other"
+                            }
                             if (id == switchIdentifier) correctControl = true
                             if (id == rowIdentifier) correctRow = true
                             if ((id.startsWith("replace-rule-enabled-") && id != switchIdentifier) ||
@@ -468,6 +480,12 @@ class SourceOrderMetadataUpdateTest {
                             node.isCheckable && !node.isChecked && node.isEnabled && node.isClickable &&
                             node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK } &&
                             bounds.width() > 0 && bounds.height() > 0 && rowBounds?.contains(bounds) == true
+                        reasons += "control=$correctControl row=$correctRow foreign=$foreignIdentity " +
+                            "contained=${rowBounds?.contains(bounds) == true} roleSwitch=${node.className == "android.widget.Switch"} " +
+                            "checkable=${node.isCheckable} checked=${node.isChecked} enabled=${node.isEnabled} " +
+                            "visible=${node.isVisibleToUser} clickable=${node.isClickable} " +
+                            "CLICK=${node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK }} " +
+                            "bounds=$bounds rowBounds=$rowBounds ancestors=$ancestorKinds"
                         if (matches) {
                             pending.forEach { it.recycle() }
                             return node
@@ -530,11 +548,37 @@ class SourceOrderMetadataUpdateTest {
                             for (index in 0 until node.childCount) node.getChild(index)?.let(nodes::add)
                         } finally { node.recycle() }
                     }
+                    freshSwitch()?.recycle()
+                    val freshRows = stale.mapIndexed { fixtureIndex, fixture ->
+                        val identifier = "replace-rule-row-${fixture.id}"
+                        val row = ui.driver.node(identifier)
+                        if (row == null) "fixture=$fixtureIndex missing=true" else {
+                            try {
+                                val refreshed = row.refresh()
+                                val bounds = android.graphics.Rect().also(row::getBoundsInScreen)
+                                val labels = mutableSetOf<Int>()
+                                val children = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+                                children.add(android.view.accessibility.AccessibilityNodeInfo.obtain(row))
+                                while (children.isNotEmpty()) {
+                                    val child = children.removeFirst()
+                                    try {
+                                        child.refresh()
+                                        stale.forEachIndexed { index, expected ->
+                                            if (child.text?.contains(expected.name) == true || child.contentDescription?.contains(expected.name) == true) labels += index
+                                        }
+                                        for (index in 0 until child.childCount) child.getChild(index)?.let(children::add)
+                                    } finally { child.recycle() }
+                                }
+                                "fixture=$fixtureIndex refreshed=$refreshed identityMatches=${row.viewIdResourceName == identifier} " +
+                                    "runtimeIdentity=${row.hashCode()} window=${row.windowId} bounds=$bounds labelFixtureIndices=$labels"
+                            } finally { row.recycle() }
+                        }
+                    }
                     // Failure-only scalars: runtime node hashes only; no names, business IDs, query text, patterns, or JSON.
                     return "roomPresent=${room != null} roomEnabled=${room?.isEnabled} roomOrder=${room?.order} " +
                         "expectedOrder=${expected.order} metadataMatches=$metadataMatches " +
                         "fixtureRoomEnabled=${stale.map { appDb.replaceRuleDao.findById(it.id)?.isEnabled }} " +
-                        "popupActions=${popupActions()} $native nodes=$rendered"
+                        "popupActions=${popupActions()} freshRows=$freshRows candidateReasons=$candidateReasons $native nodes=$rendered"
                 }
                 var switchActionAccepted = false
                 var switchPhase = "single-click-readiness"

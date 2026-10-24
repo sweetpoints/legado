@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show SemanticsAction, SemanticsActionEvent;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -616,6 +617,115 @@ void main() {
       expect(native['dialog'], null);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
+    },
+  );
+  testWidgets(
+    'reordering keeps each logical replacement switch semantics identity and action owner',
+    (tester) async {
+      native = {
+        ...native,
+        'rows': (native['rows']! as List)
+            .take(3)
+            .map((v) => {...(v as Map), 'enabled': false})
+            .toList(),
+      };
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(const MaterialApp(home: ReplaceManagerPage()));
+      await tester.pumpAndSettle();
+      Finder tagged(String id) => find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.identifier == id,
+      );
+      final before = {
+        for (var id = 1; id <= 3; id++)
+          id: tester.getSemantics(tagged('replace-rule-enabled-$id')).id,
+      };
+      final beforeElements = {
+        for (var id = 1; id <= 3; id++)
+          id: identityHashCode(tester.element(tagged('replace-rule-row-$id'))),
+      };
+      final beforeBounds = {
+        for (var id = 1; id <= 3; id++)
+          id: tester.getRect(tagged('replace-rule-row-$id')),
+      };
+      final rows = native['rows']! as List;
+      native = {
+        ...native,
+        'rows': [rows[1], rows[2], rows[0]],
+        'revision': (native['revision']! as int) + 1,
+      };
+      await messenger.handlePlatformMessage(
+        'legado/replace_manager/state',
+        const StandardMethodCodec().encodeSuccessEnvelope(native),
+        (_) {},
+      );
+      await tester.pumpAndSettle();
+      final y = [2, 3, 1]
+          .map((id) => tester.getRect(tagged('replace-rule-row-$id')).center.dy)
+          .toList();
+      expect(y[0], lessThan(y[1]));
+      expect(y[1], lessThan(y[2]));
+      final after = {
+        for (var id = 1; id <= 3; id++)
+          id: tester.getSemantics(tagged('replace-rule-enabled-$id')).id,
+      };
+      final afterElements = {
+        for (var id = 1; id <= 3; id++)
+          id: identityHashCode(tester.element(tagged('replace-rule-row-$id'))),
+      };
+      final afterBounds = {
+        for (var id = 1; id <= 3; id++)
+          id: tester.getRect(tagged('replace-rule-row-$id')),
+      };
+      // Exercise the same semantics action ID that an accessibility client obtained before movement.
+      tester.binding.performSemanticsAction(
+        SemanticsActionEvent(
+          type: SemanticsAction.tap,
+          viewId: tester.view.viewId,
+          nodeId: before[1]!,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final enabled = commands.lastWhere((v) => v['op'] == 'enabled');
+      expect(
+        enabled['ids'],
+        [1],
+        reason:
+            'beforeNode=$before afterNode=$after beforeElement=$beforeElements afterElement=$afterElements beforeBounds=$beforeBounds afterBounds=$afterBounds',
+      );
+      expect(enabled['value'], true);
+      expect(
+        after,
+        before,
+        reason: 'Logical replacement switch semantics identity must survive movement',
+      );
+      expect(
+        afterElements,
+        beforeElements,
+        reason: 'The row element belongs to its business ID',
+      );
+      for (var id = 1; id <= 3; id++) {
+        final node = tester.getSemantics(tagged('replace-rule-enabled-$id'));
+        expect(node.identifier, 'replace-rule-enabled-$id');
+        var owner = node.parent;
+        var matchesRow = false;
+        while (owner != null) {
+          if (owner.identifier == 'replace-rule-row-$id') matchesRow = true;
+          owner = owner.parent;
+        }
+        expect(
+          matchesRow,
+          true,
+          reason: 'Switch semantics stays inside the matching row owner',
+        );
+      }
+      final savedRows = (native['rows']! as List).cast<Map>();
+      expect(savedRows.map((r) => r['id']).toList(), [2, 3, 1]);
+      expect(savedRows.map((r) => r['enabled']).toList(), [false, false, true]);
+      expect(savedRows.last['group'], 'Private');
+      expect(savedRows.last['order'], 9);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+      semantics.dispose();
     },
   );
 }
