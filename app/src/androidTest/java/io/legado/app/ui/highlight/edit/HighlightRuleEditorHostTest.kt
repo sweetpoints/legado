@@ -51,36 +51,82 @@ class HighlightRuleEditorHostTest {
             false
         }
     }
-    private fun actualSelection(id: String, start: Int, end: Int, nativeSnapshot: () -> String) {
+    private fun actualSelection(scenario: ActivityScenario<HighlightRuleActivity>, id: String, start: Int, end: Int) {
+        val deadline = SystemClock.uptimeMillis() + 30_000
+        val key = id.removePrefix("highlight-rule-")
+        var actualSnapshot = "node missing"
+        var nativeSnapshot = "native host not sampled"
+        data class Native(val focus: String?, val text: String?, val range: Pair<Int, Int>?, val ime: Boolean?)
+        data class Actual(val text: String?, val focused: Boolean, val start: Int, val end: Int, val bounds: android.graphics.Rect, val selectionAction: Boolean)
+        fun native(): Native {
+            var checkpoint: Native? = null
+            scenario.onActivity { host ->
+                val state = editor(host).viewModel.state.value
+                val ime = editor(host).dialog?.window?.decorView?.let { view ->
+                    androidx.core.view.ViewCompat.getRootWindowInsets(view)
+                        ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
+                }
+                val text = when (key) { "name" -> state.draft?.rule?.name; "group" -> state.draft?.rule?.group; "pattern" -> state.draft?.rule?.pattern; "scope" -> state.draft?.rule?.scope; else -> null }
+                checkpoint = Native(state.focus, text, state.selections[key], ime)
+                nativeSnapshot = "loading=${state.loading}, saving=${state.saving}, finished=${state.finished}, " +
+                    "focus=${state.focus}, text=$text, selections=${state.selections}, scroll=${state.scroll}, error=${state.error}, imeVisible=$ime"
+            }
+            return checkNotNull(checkpoint)
+        }
+        fun actual(): Actual? = driver.node(id)?.let { node -> try {
+            val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+            actualSnapshot = "text=${node.text}, focused=${node.isFocused}, editable=${node.isEditable}, enabled=${node.isEnabled}, " +
+                "selection=${node.textSelectionStart}..${node.textSelectionEnd}, actions=${node.actionList.map { it.id }}, bounds=$bounds"
+            Actual(node.text?.toString(), node.isFocused && node.isEditable && node.isEnabled,
+                node.textSelectionStart, node.textSelectionEnd, bounds,
+                node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_SELECTION })
+        } finally { node.recycle() } } ?: run { actualSnapshot = "node missing"; null }
+        fun acknowledged(expectedRange: Boolean, hiddenIme: Boolean): Actual? {
+            val n = native(); val a = actual() ?: return null
+            if (n.focus != key || !a.focused || !a.selectionAction || a.text != n.text ||
+                n.range != (a.start to a.end) || (hiddenIme && n.ime != false) ||
+                (expectedRange && (a.start != start || a.end != end))) return null
+            return a
+        }
+        fun awaitWithin(description: String, condition: () -> Boolean) {
+            while (SystemClock.uptimeMillis() < deadline) {
+                if (condition()) return
+                SystemClock.sleep(50)
+            }
+            native(); actual()
+            fail("Timed out waiting for $description within original shared 30s selection deadline; expected focused/$start..$end; actual=[$actualSnapshot]; native=[$nativeSnapshot]")
+        }
+        fun dialogFrame(): Boolean {
+            val frame = java.util.concurrent.CountDownLatch(1)
+            scenario.onActivity { host ->
+                val decor = checkNotNull(editor(host).dialog?.window?.decorView)
+                // The actual Flutter Dialog owns this frame, not the underlying Compose Activity.
+                decor.viewTreeObserver.registerFrameCommitCallback { frame.countDown() }
+                decor.postInvalidateOnAnimation()
+            }
+            return frame.await((deadline - SystemClock.uptimeMillis()).coerceAtLeast(0), java.util.concurrent.TimeUnit.MILLISECONDS)
+        }
         driver.click(id)
-        driver.await("actual selection action $id") {
-            val node = driver.node(id) ?: return@await false
-            try { node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, Bundle().apply {
+        awaitWithin("actual and native field focus before selection") { acknowledged(false, false) != null }
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        awaitWithin("hidden IME and stable actual/native input frame") {
+            val before = acknowledged(false, true) ?: return@awaitWithin false
+            if (!dialogFrame()) return@awaitWithin false
+            val after = acknowledged(false, true) ?: return@awaitWithin false
+            before == after
+        }
+        val field = requireNotNull(driver.node(id))
+        try {
+            assertTrue("single actual selection input $id", field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, Bundle().apply {
                 putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, start)
                 putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, end)
-            }) } finally { node.recycle() }
-        }
-        var actualSnapshot = "node missing"
-        try {
-            driver.await("actual focused raw selection $id") {
-                driver.node(id)?.let { node -> try {
-                    val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
-                    val descendants = (0 until node.childCount).mapNotNull { index ->
-                        node.getChild(index)?.let { child -> try {
-                            "id=${child.viewIdResourceName}/focused=${child.isFocused}/editable=${child.isEditable}/text=${child.text}/selection=${child.textSelectionStart}..${child.textSelectionEnd}"
-                        } finally { child.recycle() } }
-                    }
-                    actualSnapshot = "text=${node.text}, focused=${node.isFocused}, editable=${node.isEditable}, " +
-                        "enabled=${node.isEnabled}, selection=${node.textSelectionStart}..${node.textSelectionEnd}, " +
-                        "actions=${node.actionList.map { it.id }}, bounds=$bounds, children=$descendants"
-                    node.isFocused && node.textSelectionStart == start && node.textSelectionEnd == end
-                } finally { node.recycle() } } ?: run { actualSnapshot = "node missing"; false }
-            }
-        } catch (failure: AssertionError) {
-            // Read the native echo only after the unchanged real accessibility assertion fails.
-            // This distinguishes focus, native ACK and rendered-selection windows without
-            // issuing any extra input or accepting the native state as a passing result.
-            throw AssertionError("Actual selection failure $id expected focused/$start..$end; actual=[$actualSnapshot]; native=[${nativeSnapshot()}]", failure)
+            }))
+        } finally { field.recycle() }
+        awaitWithin("actual/native focused raw selection and fresh Dialog frame") {
+            val before = acknowledged(true, false) ?: return@awaitWithin false
+            if (!dialogFrame()) return@awaitWithin false
+            val after = acknowledged(true, false) ?: return@awaitWithin false
+            before == after
         }
     }
     @Test fun normalManagerEditorRestoresRawDraftAndStyleThenSavesAllMetadata() {
@@ -143,20 +189,7 @@ class HighlightRuleEditorHostTest {
                 driver.setText("highlight-rule-name", "Edited")
                 reveal("highlight-rule-group"); driver.setText("highlight-rule-group", " New group ")
                 scenario.onActivity { editor(it).onHighlightStyleChanged(editor(it).currentHighlightStyle().copy(bold = true)) }
-                actualSelection("highlight-rule-name", 1, 4) {
-                    var diagnostic = "native host unavailable"
-                    scenario.onActivity { host ->
-                        val state = editor(host).viewModel.state.value
-                        val ime = editor(host).dialog?.window?.decorView?.let { view ->
-                            androidx.core.view.ViewCompat.getRootWindowInsets(view)
-                                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
-                        }
-                        diagnostic = "loading=${state.loading}, saving=${state.saving}, finished=${state.finished}, " +
-                            "focus=${state.focus}, name=${state.draft?.rule?.name}, selections=${state.selections}, " +
-                            "scroll=${state.scroll}, error=${state.error}, imeVisible=$ime"
-                    }
-                    diagnostic
-                }
+                actualSelection(scenario, "highlight-rule-name", 1, 4)
                 scenario.onActivity { host -> assertTrue(editor(host).childFragmentManager.fragments.any { it is FlutterFragment }) }
                 scenario.recreate(); ready()
                 driver.await("restored actual raw selection and focus") {
