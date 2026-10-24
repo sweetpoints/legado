@@ -161,6 +161,11 @@ void main() {
   });
 
   for (final route in [
+    '/highlight-manager',
+    '/highlight-groups',
+    '/txt-toc-manager',
+    '/txt-toc-picker',
+    '/named-groups',
     '/replace-manager',
     '/highlight-rule-editor',
     '/highlight-rule-color-picker',
