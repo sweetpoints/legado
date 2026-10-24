@@ -352,16 +352,96 @@ class SourceOrderMetadataUpdateTest {
                 fun bounds(id: String) = checkNotNull(ui.driver.node(id)).let { node ->
                     android.graphics.Rect().also { node.getBoundsInScreen(it); node.recycle() }
                 }
-                val first = bounds(rowIds[0]); val last = bounds(rowIds[2])
+                val first = bounds(rowIds[0])
                 val x = first.left + minOf(first.width() / 2f, 80 * instrumentation.targetContext.resources.displayMetrics.density)
+                // A platform long-press timeout is not the async beginDrag receipt.
+                // Share the original held-preview 15s budget across begin ACK, natural
+                // viewport turns, the one physical move and its actual/native preview.
+                val gestureDeadline = android.os.SystemClock.uptimeMillis() + 15_000
+                var gesturePhase = "held-begin"
+                fun withinGesture(description: String, condition: () -> Boolean) {
+                    val remaining = gestureDeadline - android.os.SystemClock.uptimeMillis()
+                    check(remaining > 0) { "Original replacement held-preview deadline expired at $description" }
+                    try { compose.waitUntil(timeoutMillis = remaining, condition = condition) }
+                    catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+                        error("Timed out waiting for $description")
+                    }
+                }
                 ui.driver.touchDown(x, first.exactCenterY()).use { pointer ->
-                    pointer.hold(android.view.ViewConfiguration.getLongPressTimeout().toLong() + 150)
-                    pointer.moveTo(x, last.exactCenterY() + last.height() / 4f, 500)
-                    waitUntil("actual replacement held preview") {
-                        var preview = false
-                        scenario.onActivity { preview = it.managementModel.state.value.rows.map { row -> row.id } == listOf(stale[1].id, stale[2].id, stale[0].id) }
-                        val actual = rowIds.map { id -> ui.driver.node(id)?.let { node -> android.graphics.Rect().also { node.getBoundsInScreen(it); node.recycle() } } }
-                        preview && actual.all { it != null } && actual[1]!!.centerY() < actual[2]!!.centerY() && actual[2]!!.centerY() < actual[0]!!.centerY()
+                    try {
+                        pointer.hold(android.view.ViewConfiguration.getLongPressTimeout().toLong() + 150)
+                        withinGesture("replacement native beginDrag acknowledgement") {
+                            var started = false
+                            scenario.onActivity {
+                                val state = it.managementModel.state.value
+                                started = state.loaded && !state.busy && state.pending == null &&
+                                    state.dragging == stale[0].id && state.rows.map { row -> row.id } == stale.map { row -> row.id }
+                            }
+                            started
+                        }
+                        // Observe natural host turns after native begin, then acquire fresh
+                        // target coordinates. Never invalidate or enqueue a synthetic
+                        // channel command to stand in for the physical gesture.
+                        gesturePhase = "held-begin-viewport"
+                        val turns = java.util.concurrent.CountDownLatch(1)
+                        scenario.onActivity { activity ->
+                            val decor = activity.window.decorView
+                            decor.postOnAnimation { decor.postOnAnimation { turns.countDown() } }
+                        }
+                        check(turns.await((gestureDeadline - android.os.SystemClock.uptimeMillis()).coerceAtLeast(0), java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                            "Replacement natural viewport turns exceeded original held-preview deadline"
+                        }
+                        gesturePhase = "held-single-move"
+                        var targetBounds: android.graphics.Rect? = null
+                        withinGesture("fresh replacement drag target after begin acknowledgement") {
+                            var started = false
+                            scenario.onActivity {
+                                val state = it.managementModel.state.value
+                                started = state.dragging == stale[0].id && !state.busy && state.pending == null &&
+                                    state.rows.map { row -> row.id } == stale.map { row -> row.id }
+                            }
+                            val node = ui.driver.node(rowIds[2]) ?: return@withinGesture false
+                            try {
+                                val rectangle = android.graphics.Rect().also(node::getBoundsInScreen)
+                                val ready = started && node.isVisibleToUser && !rectangle.isEmpty
+                                if (ready) targetBounds = rectangle
+                                ready
+                            } finally { node.recycle() }
+                        }
+                        val currentLast = checkNotNull(targetBounds)
+                        check(android.os.SystemClock.uptimeMillis() + 500 <= gestureDeadline) {
+                            "Original held-preview budget exhausted before physical move"
+                        }
+                        pointer.moveTo(x, currentLast.exactCenterY() + currentLast.height() / 4f, 500)
+                        gesturePhase = "held-preview"
+                        withinGesture("actual replacement held preview") {
+                            var preview = false
+                            scenario.onActivity { preview = it.managementModel.state.value.rows.map { row -> row.id } == listOf(stale[1].id, stale[2].id, stale[0].id) }
+                            val actual = rowIds.map { id -> ui.driver.node(id)?.let { node -> android.graphics.Rect().also { node.getBoundsInScreen(it); node.recycle() } } }
+                            preview && actual.all { it != null } && actual[1]!!.centerY() < actual[2]!!.centerY() && actual[2]!!.centerY() < actual[0]!!.centerY()
+                        }
+                    } catch (failure: Throwable) {
+                        // Capture before use{} releases this physical pointer.
+                        runCatching {
+                            var native = "nativeMissing=true"
+                            scenario.onActivity {
+                                val state = it.managementModel.state.value
+                                native = "loaded=${state.loaded},busy=${state.busy},pending=${state.pending != null}," +
+                                    "draggingFixtureIndex=${stale.indexOfFirst { row -> row.id == state.dragging }}," +
+                                    "visibleFixtureIndices=${state.rows.map { row -> stale.indexOfFirst { it.id == row.id } }}"
+                            }
+                            val actual = rowIds.mapIndexed { index, id ->
+                                ui.driver.node(id)?.let { node ->
+                                    try {
+                                        val rectangle = android.graphics.Rect().also(node::getBoundsInScreen)
+                                        "fixture=$index,bounds=$rectangle,visible=${node.isVisibleToUser}"
+                                    } finally { node.recycle() }
+                                } ?: "fixture=$index,missing=true"
+                            }
+                            // Only phase/fixture indices and geometry, no private contents.
+                            android.util.Log.e("ReplaceMetadataDrag", "phase=$gesturePhase $native actual=$actual")
+                        }.onFailure { failure.addSuppressed(it) }
+                        throw failure
                     }
                 }
                 waitUntil("replacement move committed") {
