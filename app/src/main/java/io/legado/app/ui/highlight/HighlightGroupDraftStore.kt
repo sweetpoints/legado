@@ -10,6 +10,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+@androidx.annotation.Keep
 internal data class HighlightGroupDraft(
     val stage: HighlightGroupStage = HighlightGroupStage.None,
     val source: String? = null,

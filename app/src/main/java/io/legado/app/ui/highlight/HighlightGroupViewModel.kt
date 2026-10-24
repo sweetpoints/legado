@@ -18,6 +18,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
+@androidx.annotation.Keep
 internal enum class HighlightGroupStage {
     None,
     Rename,
