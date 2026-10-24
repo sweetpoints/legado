@@ -502,6 +502,19 @@ class HighlightManagementViewModelTest {
             assertNull(vm.state.value.draft.exporting)
         }
 
+    @Test fun scrollIndexAndLogicalOffsetRestoreByPrivateSessionAndInvalidOffsetsCannotChangeIt() = runTest(dispatcher) {
+        val saved = SavedStateHandle(); val store = Store(); val repo = Rules(); val vm = model(repo, store, saved)
+        runCurrent(); vm.scroll(2, 17.5); vm.flush()
+        assertEquals(2, store.records[vm.ticket]!!.scrollIndex)
+        assertEquals(17.5, store.records[vm.ticket]!!.scrollOffset, .0)
+        assertThrows(IllegalArgumentException::class.java) { vm.scroll(2, Double.NaN) }
+        assertThrows(IllegalArgumentException::class.java) { vm.scroll(-1, 0.0) }
+        val next = model(repo, store, restored(saved)); runCurrent()
+        assertEquals(2, next.state.value.draft.scrollIndex); assertEquals(17.5, next.state.value.draft.scrollOffset, .0)
+        assertEquals(setOf(HighlightManagementViewModel.KEY), saved.keys())
+        assertTrue(repo.reordered.isEmpty()); assertTrue(repo.enabled.isEmpty()); assertTrue(repo.moved.isEmpty()); assertTrue(repo.deleted.isEmpty())
+    }
+
     private class Rules : HighlightManagementRepository {
         val rows =
             MutableStateFlow(
