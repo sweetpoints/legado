@@ -5,12 +5,17 @@ import androidx.activity.addCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.runtime.*
+import android.content.Intent
+import android.widget.FrameLayout
+import androidx.lifecycle.lifecycleScope
+import io.legado.app.utils.launchCleanup
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.legado.app.R
-import io.legado.app.base.BaseComposeActivity
+import io.legado.app.base.BaseThemedActivity
+import io.legado.app.data.repository.AppReplaceRulePreparedImportRepository
+import io.legado.app.data.repository.AppReplaceRuleImportRepository
 import io.legado.app.data.repository.AppReplaceManagementRepository
 import io.legado.app.data.repository.FileReplaceManagementSessionRepository
 import io.legado.app.help.coroutine.Coroutine
@@ -25,8 +30,8 @@ import io.legado.app.utils.showHelp
 import io.legado.app.utils.toastOnUi
 import java.io.File
 
-/** Pure Compose management; imports and replacements keep their established business pipelines. */
-class ReplaceRuleActivity : BaseComposeActivity() {
+/** Flutter presentation; imports and replacements retain their established native pipelines. */
+class ReplaceRuleActivity : BaseThemedActivity() {
     private val repository by lazy { AppReplaceManagementRepository() }
     internal val managementModel by
         viewModels<ReplaceManagementViewModel> {
@@ -79,7 +84,7 @@ class ReplaceRuleActivity : BaseComposeActivity() {
             .also { qrLauncher = it }
     }
 
-    override fun onComposeCreated(savedInstanceState: Bundle?) {
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
         managementModel.bind(
             ReplaceManagementLabels(
                 getString(R.string.enabled),
@@ -88,10 +93,43 @@ class ReplaceRuleActivity : BaseComposeActivity() {
             )
         )
         managementModel.waiting(ReplaceManagementAction.ImportQr)?.let(::registerQr)
-        onBackPressedDispatcher.addCallback(this) { close() }
+        onBackPressedDispatcher.addCallback(this) {
+            val fragment = managerFragment
+            if (fragment?.flutterEngine != null) fragment.onBackPressed() else closeManagement()
+        }
+        coordinator
+        if (managerFragment == null) supportFragmentManager.beginTransaction()
+            .add(R.id.replace_manager_flutter_container, ReplaceManagerFlutterFragment(), FRAGMENT_TAG).commitNow()
     }
 
-    private fun close() {
+    override fun createContentView() {
+        setContentView(FrameLayout(this).apply { id = R.id.replace_manager_flutter_container })
+    }
+
+    internal val coordinator by lazy {
+        ReplaceManagerNativeCoordinator(managementModel, lifecycle, lifecycleScope, ::ready, ::native,
+            { if (it) setResult(RESULT_OK) },
+            AppReplaceRulePreparedImportRepository(AppReplaceRuleImportRepository(this)))
+    }
+    private val managerFragment get() = supportFragmentManager.findFragmentByTag(FRAGMENT_TAG) as? ReplaceManagerFlutterFragment
+    override fun onPostResume() { super.onPostResume(); managerFragment?.onPostResume(); coordinator.onHostReady() }
+    override fun onNewIntent(intent: Intent) { managerFragment?.onNewIntent(intent); super.onNewIntent(intent) }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        managerFragment?.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data); managerFragment?.onActivityResult(requestCode, resultCode, data)
+    }
+    override fun onUserLeaveHint() { super.onUserLeaveHint(); managerFragment?.onUserLeaveHint() }
+    override fun onTrimMemory(level: Int) { super.onTrimMemory(level); managerFragment?.onTrimMemory(level) }
+    override fun onStop() {
+        managementModel.cancelGesture()
+        lifecycleScope.launchCleanup { runCatching { managementModel.flush() } }
+        super.onStop()
+    }
+
+    internal fun closeManagement() {
         if (managementModel.state.value.busy) return
         if (managementModel.state.value.changed) setResult(RESULT_OK)
         managementModel.cancelGesture()
@@ -99,13 +137,6 @@ class ReplaceRuleActivity : BaseComposeActivity() {
     }
 
     private fun ready() = !isFinishing && !isDestroyed && !supportFragmentManager.isStateSaved
-
-    @Composable
-    override fun Content(savedInstanceState: Bundle?) {
-        val state by managementModel.state.collectAsState()
-        LaunchedEffect(state.changed) { if (state.changed) setResult(RESULT_OK) }
-        ReplaceManagementRoute(managementModel, ::ready, ::close, ::native)
-    }
 
     private fun native(request: ReplaceManagementNative, preparedImport: String?) {
         try {
@@ -149,15 +180,17 @@ class ReplaceRuleActivity : BaseComposeActivity() {
         } catch (error: Exception) {
             managementModel.returned(request.effect.nonce, null)
             toastOnUi(error.localizedMessage ?: error.javaClass.simpleName)
-            throw error // Route releases a prepared import which was never handed to its dialog
+            throw error // Coordinator releases a prepared import which was never handed to its dialog
             // owner.
         }
     }
 
     override fun onDestroy() {
+        coordinator.close()
         qrLauncher?.unregister()
         qrLauncher = null
         Coroutine.async { repository.refreshPipeline() }
         super.onDestroy()
     }
+    private companion object { const val FRAGMENT_TAG = "replace-manager-flutter" }
 }
