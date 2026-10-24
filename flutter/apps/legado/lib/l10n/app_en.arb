@@ -160,6 +160,12 @@
   "dictionaryEditorExitMessage": "Keep editing the unsaved rule?",
   "dictionaryEditorKeep": "Keep editing",
   "dictionaryEditorDiscard": "Discard changes",
+  "highlightEditorBridgeError": "Field not acknowledged. Edit it again to retry.",
+  "highlightColorBridgeError": "Color input not acknowledged. Edit it again to retry.",
+  "highlightColorInvalidHex": "Enter a valid hexadecimal color.",
+  "highlightEditorPendingExit": "Some input has not been acknowledged. Keep editing?",
+  "highlightEditorKeep": "Keep editing",
+  "highlightEditorDiscard": "Discard changes",
   "pdfTitle": "PDF reader",
   "pdfImportTitle": "Import PDF",
   "pdfImportDescription": "Import a local PDF up to 32 MiB. Your document is stored in the library for offline reading.",
@@ -610,5 +616,20 @@
         "type": "int"
       }
     }
-  }
+  },
+  "txtTocEditorTitle": "TXT TOC rule",
+  "txtTocEditorName": "Name",
+  "txtTocEditorRegex": "Regex",
+  "txtTocEditorReplacement": "Replacement (JavaScript supported)",
+  "txtTocEditorFullscreen": "Fullscreen editor",
+  "txtTocEditorSave": "Save",
+  "txtTocEditorMenu": "Menu",
+  "txtTocEditorCopy": "Copy rule",
+  "txtTocEditorPaste": "Paste rule",
+  "txtTocEditorBridgeError": "Field not acknowledged. Edit it again to retry.",
+  "txtTocEditorExit": "Exit",
+  "txtTocEditorExitMessage": "Keep editing the unsaved rule?",
+  "txtTocEditorKeep": "Keep editing",
+  "txtTocEditorDiscard": "Discard changes",
+  "txtTocEditorExample": "Example"
 }

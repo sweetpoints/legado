@@ -467,6 +467,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dictionaryEditorDiscard => 'Discard changes';
 
   @override
+  String get highlightEditorBridgeError =>
+      'Field not acknowledged. Edit it again to retry.';
+
+  @override
+  String get highlightColorBridgeError =>
+      'Color input not acknowledged. Edit it again to retry.';
+
+  @override
+  String get highlightColorInvalidHex => 'Enter a valid hexadecimal color.';
+
+  @override
+  String get highlightEditorPendingExit =>
+      'Some input has not been acknowledged. Keep editing?';
+
+  @override
+  String get highlightEditorKeep => 'Keep editing';
+
+  @override
+  String get highlightEditorDiscard => 'Discard changes';
+
+  @override
   String get pdfTitle => 'PDF reader';
 
   @override
@@ -1599,4 +1620,50 @@ class AppLocalizationsEn extends AppLocalizations {
   String sourcesPage(int page) {
     return 'Page $page';
   }
+
+  @override
+  String get txtTocEditorTitle => 'TXT TOC rule';
+
+  @override
+  String get txtTocEditorName => 'Name';
+
+  @override
+  String get txtTocEditorRegex => 'Regex';
+
+  @override
+  String get txtTocEditorReplacement => 'Replacement (JavaScript supported)';
+
+  @override
+  String get txtTocEditorFullscreen => 'Fullscreen editor';
+
+  @override
+  String get txtTocEditorSave => 'Save';
+
+  @override
+  String get txtTocEditorMenu => 'Menu';
+
+  @override
+  String get txtTocEditorCopy => 'Copy rule';
+
+  @override
+  String get txtTocEditorPaste => 'Paste rule';
+
+  @override
+  String get txtTocEditorBridgeError =>
+      'Field not acknowledged. Edit it again to retry.';
+
+  @override
+  String get txtTocEditorExit => 'Exit';
+
+  @override
+  String get txtTocEditorExitMessage => 'Keep editing the unsaved rule?';
+
+  @override
+  String get txtTocEditorKeep => 'Keep editing';
+
+  @override
+  String get txtTocEditorDiscard => 'Discard changes';
+
+  @override
+  String get txtTocEditorExample => 'Example';
 }
