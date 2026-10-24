@@ -110,6 +110,26 @@ class ReplaceManagerBridge {
       if (_closed || binding == null || latest?.binding != binding) {
         throw StateError('replace_manager_view_changed');
       }
+      // Decide after preceding field commands settle. The user's modal cancellation
+      // explicitly discards a rejected background query, with its own native ACK.
+      if (op == 'cancelDialog' &&
+          latest?.dialog != null &&
+          _rejected == 'query') {
+        final discarded = _decode(
+          await channel.invokeMethod<Object?>('command', {
+            'op': 'cancelQuery',
+            'binding': binding,
+            'sequence': ++_sequence,
+          }),
+        );
+        if (_closed ||
+            latest?.binding != binding ||
+            discarded.binding != binding) {
+          throw StateError('replace_manager_view_changed');
+        }
+        _rejected = null;
+        _accept(discarded);
+      }
       final cancel =
           ['cancelGesture', 'scroll'].contains(op) ||
           (op == 'cancelQuery' &&
@@ -144,7 +164,10 @@ class ReplaceManagerBridge {
         }
         _accept(ack);
       } catch (_) {
-        if (field != null && (_rejected == null || _rejected == field)) {
+        if (!_closed &&
+            latest?.binding == binding &&
+            field != null &&
+            (_rejected == null || _rejected == field)) {
           _rejected = field;
         }
         rethrow;
