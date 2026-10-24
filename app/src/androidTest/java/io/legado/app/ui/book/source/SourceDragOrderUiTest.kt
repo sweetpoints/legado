@@ -65,7 +65,7 @@ class SourceDragOrderUiTest {
 
     @Test fun filteredRssDragPreservesHiddenOrder() = verifyRssComposeDrag()
 
-    @Test fun filteredReplaceDragPreservesHiddenOrder() = verifyReplaceComposeDrag()
+    @Test fun filteredReplaceDragPreservesHiddenOrder() = verifyReplaceFlutterDrag()
 
     @Test
     fun heldBookDragWithDeletedTargetDoesNotMoveAnotherSource() =
@@ -462,7 +462,8 @@ class SourceDragOrderUiTest {
         }
     }
 
-    private fun verifyReplaceComposeDrag() {
+    private fun verifyReplaceFlutterDrag() {
+        flutter.enableAccessibility()
         val group = "Drag ${UUID.randomUUID()}"
         val oldRules = appDb.replaceRuleDao.all
         val firstId = System.currentTimeMillis() * 1000
@@ -550,6 +551,7 @@ class SourceDragOrderUiTest {
             screenshot("drag-REPLACE-reopened")
         } finally {
             scenario?.close()
+            flutter.close()
             appDb.replaceRuleDao.delete(*rules.toTypedArray())
             val savedOrders = oldRules.associate { it.id to it.order }
             appDb.replaceRuleDao.update(
@@ -622,6 +624,12 @@ class SourceDragOrderUiTest {
         }
 
     private fun filter(kind: Kind, query: String) {
+        if (kind == Kind.REPLACE) {
+            flutter.setText("replace-rule-search", query)
+            closeSoftKeyboard()
+            waitUntil("actual replacement query reflects input") { flutter.text("replace-rule-search") == query }
+            return
+        }
         if (kind == Kind.BOOK || kind == Kind.RSS) {
             val identifier = if (kind == Kind.BOOK) "source-manager-query" else "rss-manager-query"
             flutter.setText(identifier, query)
@@ -654,7 +662,7 @@ class SourceDragOrderUiTest {
         when (kind) {
             Kind.BOOK -> flutter.awaitIdentifier("source-manager-query")
             Kind.RSS -> flutter.awaitIdentifier("rss-manager-query")
-            Kind.REPLACE -> compose.onNodeWithTag(listTag(kind)).assertExists()
+            Kind.REPLACE -> flutter.awaitIdentifier("replace-rule-list")
         }
     }
 
@@ -690,7 +698,7 @@ class SourceDragOrderUiTest {
         when (kind) {
             Kind.BOOK -> flutter.awaitIdentifier("source-manager-query")
             Kind.RSS -> flutter.awaitIdentifier("rss-manager-query")
-            Kind.REPLACE -> compose.onNodeWithTag(listTag(kind)).assertExists()
+            Kind.REPLACE -> flutter.awaitIdentifier("replace-rule-list")
         }
     }
 
@@ -699,6 +707,14 @@ class SourceDragOrderUiTest {
         expected: List<String>,
         rssIds: Boolean = false,
     ): Boolean {
+        if (kind == Kind.REPLACE) {
+            val bounds = expected.map { key ->
+                val node = flutter.node("replace-rule-row-$key") ?: return false
+                android.graphics.Rect().also { node.getBoundsInScreen(it); node.recycle() }
+            }
+            return bounds.all { it.height() > 0 } &&
+                bounds.zipWithNext().all { (first, next) -> first.centerY() < next.centerY() }
+        }
         if (kind == Kind.BOOK || kind == Kind.RSS) {
             val bounds = expected.map { key ->
                 val identifier = if (kind == Kind.BOOK) "source-manager-row:$key"
@@ -727,6 +743,60 @@ class SourceDragOrderUiTest {
         returnToStart: Boolean = false,
         whileHeld: () -> Unit = {},
     ) {
+        if (kind == Kind.REPLACE) {
+            var previousGeometry: Pair<android.graphics.Rect, android.graphics.Rect>? = null
+            waitUntil("replacement IME hidden and actual drag geometry settled") {
+                var imeHidden = false
+                scenario.onActivity { activity ->
+                    val insets = ViewCompat.getRootWindowInsets(activity.window.decorView)
+                    imeHidden = insets != null && insets.getInsets(WindowInsetsCompat.Type.ime()).bottom == 0
+                }
+                val firstNode = flutter.node("replace-rule-row-${original.first()}")
+                val lastNode = flutter.node("replace-rule-row-${original.last()}")
+                if (firstNode == null || lastNode == null) {
+                    firstNode?.recycle(); lastNode?.recycle()
+                    return@waitUntil false
+                }
+                val next = android.graphics.Rect().also { firstNode.getBoundsInScreen(it); firstNode.recycle() } to
+                    android.graphics.Rect().also { lastNode.getBoundsInScreen(it); lastNode.recycle() }
+                val stable = next == previousGeometry
+                previousGeometry = next
+                val controls = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+                flutter.node("replace-rule-enabled-${original.first()}")?.let(controls::add)
+                var acknowledged = false
+                while (controls.isNotEmpty()) {
+                    val node = controls.removeFirst()
+                    if (node.isVisibleToUser && node.isCheckable && node.isEnabled && node.isClickable &&
+                        node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK }) acknowledged = true
+                    for (index in 0 until node.childCount) node.getChild(index)?.let(controls::add)
+                    node.recycle()
+                }
+                imeHidden && stable && acknowledged
+            }
+            val first = flutter.bounds("replace-rule-row-${original.first()}")
+            val last = flutter.bounds("replace-rule-row-${original.last()}")
+            // Long-press the name band, outside checkbox slide-selection and row actions.
+            val x = first.left + minOf(first.width() / 2f, 80 * context.resources.displayMetrics.density)
+            var returned = false
+            flutter.touchDown(x, first.exactCenterY()).use { pointer ->
+                pointer.hold(ViewConfiguration.getLongPressTimeout().toLong() + 150)
+                pointer.moveTo(x, last.exactCenterY() + last.height() / 4f, 500)
+                try {
+                    awaitItems(kind, scenario, original.drop(1) + original.first())
+                    whileHeld()
+                    if (returnToStart) {
+                        pointer.moveTo(x, first.exactCenterY() - first.height() / 4f, 500)
+                        awaitItems(kind, scenario, original)
+                        returned = true
+                    }
+                } catch (failure: Throwable) {
+                    screenshot("drag-held-failure-${SystemClock.uptimeMillis()}")
+                    throw failure
+                }
+            }
+            if (returned) awaitItems(kind, scenario, original)
+            return
+        }
         val list = compose.onNodeWithTag(listTag(kind))
         val bounds = list.fetchSemanticsNode().boundsInRoot
         val first =
