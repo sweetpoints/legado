@@ -1,5 +1,7 @@
 package io.legado.app.ui.group
 
+import io.legado.app.BuildConfig
+import android.util.Log
 import androidx.lifecycle.Lifecycle
 import io.legado.app.utils.GSON
 import java.security.MessageDigest
@@ -22,6 +24,16 @@ internal class NamedGroupNativeCoordinator(
     private var closed = false
     private var dismissed = false
     private var rejected = false
+    private var debugTraceCount = 0
+    private fun traceInput(phase: String, length: Int, start: Int, end: Int) {
+        if (!BuildConfig.DEBUG || debugTraceCount >= 128) return
+        val state = model.state.value
+        Log.d("NamedGroupsTrace", "native#${++debugTraceCount} uptime=${android.os.SystemClock.uptimeMillis()} " +
+            "phase=$phase generation=$generation revision=$revision argumentLength=$length " +
+            "argumentSelection=$start..$end nativeLength=${state.name.length} " +
+            "nativeSelection=${state.selectionStart}..${state.selectionEnd} editing=${state.editing} " +
+            "busy=${state.busy} rejected=$rejected recoveryFailed=${state.recoveryFailed} uncertain=${state.mutationUncertain}")
+    }
     private var revision = 0L
     private var last: Map<String, Any?>? = null
     val changes = model.state.map { it }
@@ -58,13 +70,20 @@ internal class NamedGroupNativeCoordinator(
         require(args["generation"] == generation)
         val op = args["op"] as? String ?: error("Missing operation")
         if (op == "field") {
+            if (BuildConfig.DEBUG) traceInput("field-before", (args["text"] as? String)?.length ?: -1,
+                args["start"] as? Int ?: -1, args["end"] as? Int ?: -1)
             try {
                 check(model.state.value.let { it.editing && !it.busy && !it.recoveryFailed && !it.mutationUncertain })
                 val text = args["text"] as? String ?: error("Missing text")
                 val start = args["start"] as? Int ?: error("Missing start")
                 val end = args["end"] as? Int ?: error("Missing end")
                 model.input(text, start, end); rejected = false
-            } catch (failure: Exception) { rejected = true; throw failure }
+                traceInput("field-after", text.length, start, end)
+            } catch (failure: Exception) {
+                rejected = true
+                traceInput("field-rejected", -1, -1, -1)
+                throw failure
+            }
         } else {
             if (op !in setOf("cancel", "back")) check(!rejected) { "Unacknowledged input" }
             when (op) {

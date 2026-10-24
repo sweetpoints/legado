@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -21,6 +22,23 @@ class _NamedGroupsState extends State<NamedGroupsPage> {
   StreamSubscription<NamedGroupsSnapshot>? subscription;
   TextEditingValue? pending;
   bool reflecting = false, failed = false, endingEdit = false;
+  int debugTraceCount = 0;
+  void trace(String phase, {NamedGroupsSnapshot? incoming}) {
+    if (!kDebugMode || debugTraceCount >= 128) return;
+    final value = controller.value;
+    final snapshot = incoming ?? state;
+    debugPrint(
+      'NamedGroupsTrace page#${++debugTraceCount} '
+      'time=${DateTime.now().microsecondsSinceEpoch} phase=$phase '
+      'generation=${snapshot?.generation} revision=${snapshot?.revision} '
+      'nativeLength=${snapshot?.name.length} nativeSelection=${snapshot?.start}..${snapshot?.end} '
+      'controllerLength=${value.text.length} selection=${value.selection.baseOffset}..${value.selection.extentOffset} '
+      'composing=${value.composing.start}..${value.composing.end} focused=${focus.hasFocus} '
+      'reflecting=$reflecting pending=${pending != null} endingEdit=$endingEdit '
+      'editing=${snapshot?.editing} busy=${snapshot?.busy} failed=$failed',
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +60,7 @@ class _NamedGroupsState extends State<NamedGroupsPage> {
 
   void accept(NamedGroupsSnapshot next) {
     if (!mounted) return;
+    trace('accept-before', incoming: next);
     final newlyEditing =
         next.editing &&
         (state?.editing != true || state?.generation != next.generation);
@@ -57,6 +76,7 @@ class _NamedGroupsState extends State<NamedGroupsPage> {
       );
       if (controller.value != value) controller.value = value;
       reflecting = false;
+      trace('accept-reflected', incoming: next);
     }
     setState(() {
       state = next;
@@ -73,6 +93,7 @@ class _NamedGroupsState extends State<NamedGroupsPage> {
 
   void changed() {
     final value = controller.value;
+    trace('controller-changed');
     if (reflecting ||
         endingEdit ||
         state?.editing != true ||
@@ -81,6 +102,7 @@ class _NamedGroupsState extends State<NamedGroupsPage> {
       return;
     }
     pending = value;
+    trace('field-enqueue');
     unawaited(() async {
       try {
         await bridge.command('field', {
@@ -88,12 +110,16 @@ class _NamedGroupsState extends State<NamedGroupsPage> {
           'start': value.selection.baseOffset,
           'end': value.selection.extentOffset,
         });
+        if (mounted) trace('field-replied');
         if (mounted && pending == value) {
           pending = null;
           setState(() => failed = bridge.hasRejectedField);
         }
       } catch (_) {
-        if (mounted) setState(() => failed = true);
+        if (mounted) {
+          trace('field-rejected');
+          setState(() => failed = true);
+        }
       }
     }());
   }

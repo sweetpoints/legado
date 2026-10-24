@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class NamedGroupRow {
@@ -66,10 +67,27 @@ class NamedGroupsBridge {
   final _retired = <int>{};
   Future<void> _queue = Future.value();
   bool _closed = false, _rejected = false;
+  int _debugTraceCount = 0, _debugFieldSequence = 0;
+  void _trace(
+    String phase,
+    NamedGroupsSnapshot? snapshot, [
+    String details = '',
+  ]) {
+    if (!kDebugMode || _debugTraceCount >= 128) return;
+    debugPrint(
+      'NamedGroupsTrace bridge#${++_debugTraceCount} '
+      'time=${DateTime.now().microsecondsSinceEpoch} phase=$phase '
+      'generation=${snapshot?.generation} revision=${snapshot?.revision} '
+      'length=${snapshot?.name.length} selection=${snapshot?.start}..${snapshot?.end} '
+      'editing=${snapshot?.editing} busy=${snapshot?.busy} closed=$_closed rejected=$_rejected $details',
+    );
+  }
+
   bool get hasRejectedField => _rejected;
   void accept(Object? value) {
     if (_closed) return;
     final next = NamedGroupsSnapshot(value);
+    _trace('snapshot-incoming', next);
     if (_retired.contains(next.generation) ||
         (latest?.generation == next.generation &&
             next.revision < latest!.revision)) {
@@ -107,6 +125,16 @@ class NamedGroupsBridge {
       'generation': generation,
     });
     final field = op == 'field';
+    final fieldSequence = field && kDebugMode ? ++_debugFieldSequence : 0;
+    if (field && kDebugMode) {
+      _trace(
+        'field-enqueue',
+        latest,
+        'field=$fieldSequence '
+            'argumentLength=${(args['text'] as String?)?.length} '
+            'argumentSelection=${args['start'] as int?}..${args['end'] as int?}',
+      );
+    }
     final next = _queue.then((_) async {
       if (_closed || generation == null || latest?.generation != generation) {
         throw StateError('named_groups_retired');
@@ -115,9 +143,11 @@ class NamedGroupsBridge {
         throw StateError('named_groups_unacknowledged');
       }
       try {
+        if (field) _trace('field-send', latest, 'field=$fieldSequence');
         final ack = NamedGroupsSnapshot(
           await channel.invokeMethod<Object?>('command', immutable),
         );
+        if (field) _trace('field-ack', ack, 'field=$fieldSequence');
         if (_closed ||
             ack.generation != generation ||
             latest?.generation != generation) {
@@ -132,6 +162,7 @@ class NamedGroupsBridge {
         if (field || ['cancel', 'back'].contains(op)) _rejected = false;
         accept(ack.raw);
       } catch (_) {
+        if (field) _trace('field-error', latest, 'field=$fieldSequence');
         if (field && !_closed && latest?.generation == generation) {
           _rejected = true;
         }
