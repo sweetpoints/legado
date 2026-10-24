@@ -5,17 +5,46 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.os.Bundle
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import io.flutter.embedding.android.FlutterFragment
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.TxtTocRule
 import io.legado.app.model.localBook.TextFile
+import io.legado.app.data.repository.RoomTxtTocRuleManagementRepository
+import io.legado.app.ui.about.AboutActivity
+import io.legado.app.utils.GSON
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.UUID
+
+/** Headless, real SavedStateOwner: private checkpoint acceptance, never a large a11y input proxy. */
+class TxtTocCheckpointOwner : Fragment() {
+    var createdHandle: SavedStateHandle? = null
+        private set
+    val model by viewModels<TxtTocRuleManagementViewModel> {
+        viewModelFactory {
+            initializer {
+                val handle = createSavedStateHandle()
+                createdHandle = handle
+                TxtTocRuleManagementViewModel(
+                    RoomTxtTocRuleManagementRepository(requireContext().applicationContext),
+                    handle,
+                    sessions = FileTxtTocManagementSessionRepository(requireContext()),
+                )
+            }
+        }
+    }
+    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); model }
+}
 
 /** Normal native entry points, real Flutter controls, Room and durable private receipts. */
 class FlutterTxtTocManagerUiTest {
@@ -47,8 +76,11 @@ class FlutterTxtTocManagerUiTest {
             }
         } } finally { db { appDb.txtTocRuleDao.get(id)?.let { appDb.txtTocRuleDao.delete(it) } } }
     }
-    @Test fun largePrivateQueryAndOnlineDraftKeepActualRawSelectionsWithoutLargeSavedBundle() {
-        val query = "private-query ".repeat(24000); val draft = "private-url ".repeat(28000)
+    @Test fun actualQueryAndOnlineDraftKeepRawSelectionsWithoutLargeSavedBundle() {
+        // Actual UI input/selection coverage is deliberately separate from oversized private storage.
+        // Accessibility actions and text events are Binder transactions with a shared finite buffer.
+        val token = UUID.randomUUID().toString()
+        val query = "query private 😀 $token"; val draft = "https://fixture.invalid/😀?draft=$token"
         TxtTocManagerUiProbe(instrumentation).use { ui ->
             ActivityScenario.launch(TxtTocRuleActivity::class.java).use { scenario ->
                 var model: TxtTocRuleManagementViewModel? = null; scenario.onActivity { model = it.viewModel }
@@ -81,6 +113,78 @@ class FlutterTxtTocManagerUiTest {
                 ui.click("txt-toc-dialog-cancel")
                 ui.await15("modal cancellation retains actual background query selection") { !model!!.state.value.online && ui.actual("txt-toc-search") { it.text?.toString() == query && it.textSelectionStart == 2 && it.textSelectionEnd == 5 } }
             }
+        }
+    }
+    @Test fun largePrivateFileCheckpointRestoresFreshOwnerAndKeepsActualActivitySavedBundleSmall() {
+        // Preserve the original stress payloads. None of these large values is submitted through
+        // ACTION_SET_TEXT or exposed as a large Accessibility text node; that is a different boundary.
+        val query = "private-query ".repeat(24000); val draft = "private-url ".repeat(28000)
+        assertEquals(336000, query.length); assertEquals(336000, draft.length)
+        val sessionKey = "txt.toc.management.ticket"
+        val fileStore = FileTxtTocManagementSessionRepository(instrumentation.targetContext)
+        var ticket: String? = null
+        fun await15(description: String, check: () -> Boolean) {
+            val deadline = SystemClock.uptimeMillis() + 15000
+            while (SystemClock.uptimeMillis() < deadline) {
+                if (check()) return
+                SystemClock.sleep(50)
+            }
+            assertTrue(description, check())
+        }
+        try {
+            ActivityScenario.launch(AboutActivity::class.java).use { scenario ->
+                var owner: TxtTocCheckpointOwner? = null
+                scenario.onActivity { activity ->
+                    owner = TxtTocCheckpointOwner()
+                    activity.supportFragmentManager.beginTransaction().add(checkNotNull(owner), "txt-checkpoint-old").commitNow()
+                }
+                val originalModel = checkNotNull(owner).model
+                await15("real private session loaded") { !originalModel.state.value.loading }
+                scenario.onActivity {
+                    val handle = checkNotNull(checkNotNull(owner).createdHandle)
+                    ticket = handle[sessionKey]
+                    assertEquals(setOf(sessionKey), handle.keys())
+                    originalModel.inputQuery(query); originalModel.querySelection(2, 5)
+                    originalModel.showOnline(true); originalModel.inputOnline(draft); originalModel.onlineSelection(2, 5)
+                }
+                runBlocking(Dispatchers.Main) { originalModel.persist() }
+                val checkpoint = runBlocking { checkNotNull(fileStore.read(checkNotNull(ticket))) }
+                assertTrue("Full query is stored in the real private file", checkpoint.values["txt.toc.management.query"] == "s" + GSON.toJson(query))
+                assertTrue("Full online draft is stored in the real private file", checkpoint.values["txt.toc.management.input"] == "s" + GSON.toJson(draft))
+                assertEquals("i2", checkpoint.values["txt.toc.management.query.start"]); assertEquals("i5", checkpoint.values["txt.toc.management.query.end"])
+                assertEquals("i2", checkpoint.values["txt.toc.management.input.start"]); assertEquals("i5", checkpoint.values["txt.toc.management.input.end"])
+                assertEquals("btrue", checkpoint.values["txt.toc.management.online"])
+                fun assertActualBundleSmall() {
+                    scenario.onActivity { activity ->
+                        val bundle = Bundle()
+                        android.app.Activity::class.java.getDeclaredMethod("onSaveInstanceState", Bundle::class.java).apply { isAccessible = true }.invoke(activity, bundle)
+                        val parcel = android.os.Parcel.obtain()
+                        try { parcel.writeBundle(bundle); assertTrue("Full private TXT values did not enter real Activity saved Bundle", parcel.dataSize() < 256000) }
+                        finally { parcel.recycle() }
+                    }
+                }
+                assertActualBundleSmall()
+                scenario.recreate()
+                // Recreate can retain a ViewModel. Remove its actual SavedStateOwner so that the
+                // next owner is forced to create a distinct VM and re-read the real private file.
+                scenario.onActivity { activity ->
+                    val previous = activity.supportFragmentManager.findFragmentByTag("txt-checkpoint-old") as TxtTocCheckpointOwner
+                    activity.supportFragmentManager.beginTransaction().remove(previous).commitNow()
+                    owner = TxtTocCheckpointOwner().apply { arguments = Bundle().apply { putString(sessionKey, checkNotNull(ticket)) } }
+                    activity.supportFragmentManager.beginTransaction().add(checkNotNull(owner), "txt-checkpoint-fresh").commitNow()
+                }
+                val restored = checkNotNull(owner).model
+                assertNotSame("Private file restore must not reuse a retained VM", originalModel, restored)
+                await15("fresh VM restores both complete private values, both raw selections and online modal") {
+                    restored.state.value.let { !it.loading && it.query == query && it.queryStart == 2 && it.queryEnd == 5 && it.online && it.onlineInput == draft && it.onlineStart == 2 && it.onlineEnd == 5 }
+                }
+                scenario.onActivity { assertEquals(setOf(sessionKey), checkNotNull(checkNotNull(owner).createdHandle).keys()) }
+                assertActualBundleSmall()
+                // No confirm/import/Room mutation is invoked. The compact UI case separately
+                // proves actual rendered controls and cancellation through the real Flutter host.
+            }
+        } finally {
+            ticket?.let { value -> runBlocking { fileStore.release(value) } }
         }
     }
     @Test fun physicalDragPreservesConcurrentMetadataAndCancelledDragDoesNotCommit() {
