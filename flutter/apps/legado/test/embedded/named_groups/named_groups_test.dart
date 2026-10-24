@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:ui' show SemanticsAction, SemanticsActionEvent;
+
+import 'package:flutter/semantics.dart' show SemanticsNode;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -312,6 +315,55 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(calls.map((c) => c['op']), ['field', 'cancel']);
+    },
+  );
+  testWidgets(
+    'owned list identifier contains a separate advertised scroll action for many groups',
+    (tester) async {
+      native = {
+        ...fixture(),
+        'groups': [
+          for (var i = 0; i < 120; i++) {'id': '$i', 'name': 'Group $i'},
+        ],
+      };
+      await app(tester);
+      await tester.pumpAndSettle();
+      final owner = tester.getSemantics(
+        find.bySemanticsIdentifier('named-group-list'),
+      );
+      expect(
+        owner.getSemanticsData().hasAction(SemanticsAction.scrollUp),
+        false,
+      );
+      final pending = <SemanticsNode>[owner];
+      SemanticsNode? scroller;
+      while (pending.isNotEmpty) {
+        final node = pending.removeAt(0);
+        if (node.getSemanticsData().hasAction(SemanticsAction.scrollUp)) {
+          scroller = node;
+          break;
+        }
+        node.visitChildren((child) {
+          pending.add(child);
+          return true;
+        });
+      }
+      expect(scroller, isNotNull);
+      expect(scroller!.id, isNot(owner.id));
+      final position = tester
+          .state<ScrollableState>(find.byType(Scrollable))
+          .position;
+      expect(position.pixels, 0);
+      tester.binding.performSemanticsAction(
+        SemanticsActionEvent(
+          type: SemanticsAction.scrollUp,
+          viewId: tester.view.viewId,
+          nodeId: scroller.id,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(position.pixels, greaterThan(0));
+      expect(calls, isEmpty);
     },
   );
 }
