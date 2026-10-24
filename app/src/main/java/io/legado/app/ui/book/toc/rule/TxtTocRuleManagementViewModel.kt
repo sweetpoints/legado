@@ -7,6 +7,11 @@ import io.legado.app.data.repository.TxtTocRuleManagementRepository
 import io.legado.app.data.repository.TxtTocRuleSnapshot
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -27,6 +32,12 @@ data class TxtTocRuleManagementUiState(
     val rules: List<TxtTocRuleSnapshot> = emptyList(),
     val selected: Set<Long> = emptySet(),
     val query: String = "",
+    val queryStart: Int = 0,
+    val queryEnd: Int = 0,
+    val onlineStart: Int = 0,
+    val onlineEnd: Int = 0,
+    val scrollIndex: Int = 0,
+    val scrollOffset: Int = 0,
     val selectedId: Long? = null,
     val pickerFinished: Boolean = false,
     val loading: Boolean = true,
@@ -60,10 +71,29 @@ data class TxtTocRuleManagementUiState(
 
 class TxtTocRuleManagementViewModel(
     private val repository: TxtTocRuleManagementRepository,
-    private val saved: SavedStateHandle,
+    savedState: SavedStateHandle,
     private val picker: Boolean = false,
     private val initialRegex: String? = null,
+    private val sessions: TxtTocManagementSessionRepository? = null,
+    private val initialRegexTicket: String? = null,
 ) : ViewModel() {
+    private val saved = if (sessions == null) savedState else SavedStateHandle()
+    private val ticket = savedState.get<String>(KEY + "ticket") ?: java.util.UUID.randomUUID().toString().also { savedState[KEY + "ticket"] = it }
+    private var sessionRevision = 0L
+    private var sessionClosed = false
+    internal suspend fun closeSession() { sessionClosed = true; sessions?.release(ticket) }
+    private val persistence = kotlinx.coroutines.sync.Mutex()
+    private var restored = sessions == null
+    internal val privateStateReady get() = restored
+    private var restoreJob: Job? = null
+    suspend fun persist() {
+        val store = sessions ?: return
+        check(restored && !sessionClosed)
+        persistence.lock()
+        try { store.write(ticket, txtTocSessionSnapshot(saved, ++sessionRevision)) }
+        finally { persistence.unlock() }
+    }
+    private var pickerInitialRegex = initialRegex
     private var pickerSelectionInitialized = saved[KEY + "picker.initialized"] ?: false
     private var watchJob: Job? = null
     private var range: TxtTocRangeSelection? = null
@@ -75,9 +105,16 @@ class TxtTocRuleManagementViewModel(
         if (reorderCommitted) saved.get<ArrayList<Long>>(KEY + "order")?.toList() else baselineOrder
     private var recoveringGesture = baselineOrder != null && !reorderCommitted
     private val mutableState =
-        MutableStateFlow(
+        MutableStateFlow(initialState())
+    private fun initialState() =
             TxtTocRuleManagementUiState(
                 query = saved[KEY + "query"] ?: "",
+                queryStart = saved[KEY + "query.start"] ?: 0,
+                queryEnd = saved[KEY + "query.end"] ?: 0,
+                onlineStart = saved[KEY + "input.start"] ?: 0,
+                onlineEnd = saved[KEY + "input.end"] ?: 0,
+                scrollIndex = saved[KEY + "scroll.index"] ?: 0,
+                scrollOffset = saved[KEY + "scroll.offset"] ?: 0,
                 selectedId = saved[KEY + "picker.selected"],
                 pickerFinished = saved[KEY + "picker.finished"] ?: false,
                 selected =
@@ -99,10 +136,33 @@ class TxtTocRuleManagementViewModel(
                         )
                     },
             )
-        )
     val state = mutableState.asStateFlow()
 
-    init {
+    init { if (sessions == null) initialize() else restorePrivate() }
+    private fun restorePrivate() {
+        if (restoreJob?.isActive == true) return
+        mutableState.value = state.value.copy(loading = true, error = null)
+        restoreJob = viewModelScope.launch {
+            try {
+                checkNotNull(sessions).read(ticket)?.let {
+                    sessionRevision = it.revision
+                    txtTocRestoreSession(saved, it)
+                }
+                pickerSelectionInitialized = saved[KEY + "picker.initialized"] ?: false
+                if (!pickerSelectionInitialized && initialRegexTicket != null) pickerInitialRegex = TxtTocPickerSeed.read(initialRegexTicket)
+                reorderCommitted = saved[KEY + "order.committed"] ?: false
+                baselineOrder = saved.get<ArrayList<Long>>(KEY + "order.baseline")?.toList()
+                previewOrder = if (reorderCommitted) saved.get<ArrayList<Long>>(KEY + "order")?.toList() else baselineOrder
+                recoveringGesture = baselineOrder != null && !reorderCommitted
+                mutableState.value = initialState()
+                restored = true
+                initialize()
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) { mutableState.value = state.value.copy(loading = false, error = error.localizedMessage ?: "ERROR") }
+        }
+    }
+
+    private fun initialize() {
         saved.remove<ArrayList<Long>>(KEY + "selection.baseline")
         saved[KEY + "selection"] = ArrayList(state.value.selected)
         if (recoveringGesture) clearSavedOrder()
@@ -118,6 +178,7 @@ class TxtTocRuleManagementViewModel(
     }
 
     fun retry() {
+        if (!restored) { restorePrivate(); return }
         if (reorderCommitted && previewOrder != null) finishReorder() else observe()
     }
 
@@ -133,8 +194,8 @@ class TxtTocRuleManagementViewModel(
                         val id =
                             rows
                                 .lastOrNull {
-                                    initialRegex != null &&
-                                        initialRegex ==
+                                    pickerInitialRegex != null &&
+                                        pickerInitialRegex ==
                                             it.rule +
                                                 io.legado.app.model.localBook.TextFile.spaceChars +
                                                 it.replacement
@@ -286,11 +347,27 @@ class TxtTocRuleManagementViewModel(
         if (names.isNotEmpty()) operation { repository.setEnabled(names, enabled) }
     }
 
+    fun scroll(index: Int, offset: Int) {
+        require(index >= 0 && offset >= 0)
+        saved[KEY + "scroll.index"] = index; saved[KEY + "scroll.offset"] = offset
+        mutableState.value = state.value.copy(scrollIndex = index, scrollOffset = offset)
+    }
+    fun querySelection(start: Int, end: Int) {
+        require(start in 0..state.value.query.length && end in 0..state.value.query.length)
+        saved[KEY + "query.start"] = start; saved[KEY + "query.end"] = end
+        mutableState.value = state.value.copy(queryStart = start, queryEnd = end)
+    }
+    fun onlineSelection(start: Int, end: Int) {
+        require(start in 0..state.value.onlineInput.length && end in 0..state.value.onlineInput.length)
+        saved[KEY + "input.start"] = start; saved[KEY + "input.end"] = end
+        mutableState.value = state.value.copy(onlineStart = start, onlineEnd = end)
+    }
     fun inputQuery(query: String) {
         if (query == state.value.query) return
         cancelGestures()
         saved[KEY + "query"] = query
-        mutableState.value = state.value.copy(query = query)
+        saved[KEY + "query.start"] = query.length; saved[KEY + "query.end"] = query.length
+        mutableState.value = state.value.copy(query = query, queryStart = query.length, queryEnd = query.length)
         if (!picker) setSelection(emptySet())
     }
 
@@ -361,7 +438,8 @@ class TxtTocRuleManagementViewModel(
 
     fun inputOnline(value: String) {
         saved[KEY + "input"] = value
-        mutableState.value = state.value.copy(onlineInput = value)
+        saved[KEY + "input.start"] = value.length; saved[KEY + "input.end"] = value.length
+        mutableState.value = state.value.copy(onlineInput = value, onlineStart = value.length, onlineEnd = value.length)
     }
 
     private fun loadHistory() {
@@ -457,12 +535,40 @@ class TxtTocRuleManagementViewModel(
         return effect
     }
 
+    /** Durable claim stays cancellable only after the same receipt can be restored. */
+    suspend fun consumeEffect(canDeliver: () -> Boolean): TxtTocManagementEffect? {
+        if (!restored || state.value.loading || state.value.busy) return null
+        val effect = state.value.effect ?: return null
+        mutableState.value = state.value.copy(busy = true)
+        try {
+            persistence.lock()
+            try {
+                currentCoroutineContext().ensureActive()
+                if (sessionClosed || !canDeliver() || state.value.effect != effect) return null
+                val before = txtTocSessionSnapshot(saved, ++sessionRevision)
+                val next = before.copy(values = before.values - setOf(KEY + "effect.kind", KEY + "effect.value"), revision = ++sessionRevision)
+                sessions?.let { withContext(NonCancellable) { it.write(ticket, next) } }
+                if (!currentCoroutineContext().isActive || !canDeliver() || sessionClosed) {
+                    if (!sessionClosed) sessions?.let { withContext(NonCancellable) { it.write(ticket, before.copy(revision = ++sessionRevision)) } }
+                    currentCoroutineContext().ensureActive()
+                    return null
+                }
+                check(state.value.effect == effect)
+                saved.remove<String>(KEY + "effect.kind")
+                saved.remove<String>(KEY + "effect.value")
+                mutableState.value = state.value.copy(effect = null)
+                return effect
+            } finally { persistence.unlock() }
+        } finally { mutableState.value = state.value.copy(busy = false) }
+    }
+
     private fun operation(block: suspend () -> Unit) {
         if (state.value.busy) return
         mutableState.value = state.value.copy(busy = true, error = null)
         viewModelScope.launch {
             try {
                 block()
+                persist()
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
