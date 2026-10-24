@@ -1,6 +1,7 @@
 package io.legado.app.ui.highlight
 
 import android.app.Instrumentation
+import android.graphics.Rect
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import io.legado.app.ui.flutter.FlutterUiTestDriver
@@ -10,10 +11,11 @@ import org.junit.Assert.*
 /** Actual Android accessibility only: no test bridge or direct ViewModel action. */
 @Suppress("DEPRECATION")
 internal class HighlightManagerUiProbe(val driver: FlutterUiTestDriver, private val instrumentation: Instrumentation) {
-    fun await15(description: String, predicate: () -> Boolean) {
+    fun await15(description: String, predicate: () -> Boolean) = await15(description, { "" }, predicate)
+    fun await15(description: String, diagnostic: () -> String, predicate: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 15_000
         while (SystemClock.uptimeMillis() < deadline) { if (predicate()) return; SystemClock.sleep(50) }
-        assertTrue(description, predicate())
+        if (!predicate()) fail("$description; ${diagnostic()}")
     }
     fun exists(id: String) = driver.node(id)?.let { it.recycle(); true } ?: false
     fun reveal(id: String, list: String = "highlight-management-list") {
@@ -64,14 +66,38 @@ internal class HighlightManagerUiProbe(val driver: FlutterUiTestDriver, private 
         }
         return result
     }
+    private fun scalar(node: AccessibilityNodeInfo): String? =
+        node.text?.toString()?.takeIf(String::isNotEmpty)
+            ?: node.contentDescription?.toString()?.takeIf(String::isNotEmpty)
+
     fun text(id: String): String {
         val pending = ArrayDeque<AccessibilityNodeInfo>(); driver.node(id)?.let(pending::add) ?: return ""
-        val values = mutableListOf<String>()
         while (pending.isNotEmpty()) {
-            val n = pending.removeFirst(); n.text?.toString()?.takeIf(String::isNotEmpty)?.let(values::add)
+            val n = pending.removeFirst()
+            // Fixed Flutter embedding maps editable value to text, ordinary label/value/hint
+            // to contentDescription. Preserve the complete scalar; never trim or concatenate.
+            val value = scalar(n)
+            if (value != null) { n.recycle(); pending.forEach { it.recycle() }; return value }
             for (i in 0 until n.childCount) n.getChild(i)?.let(pending::add)
             n.recycle()
         }
-        return values.firstOrNull().orEmpty()
+        return ""
+    }
+    /** Failure-only shape/equality diagnostics, without names, labels or other private text. */
+    fun diagnostic(id: String, expectedText: String? = null): String {
+        val pending = ArrayDeque<AccessibilityNodeInfo>(); driver.node(id)?.let(pending::add) ?: return "nodeMissing=true"
+        val nodes = mutableListOf<String>()
+        while (pending.isNotEmpty()) {
+            val n = pending.removeFirst()
+            val bounds = Rect().also(n::getBoundsInScreen)
+            val value = scalar(n)
+            nodes += "index=${nodes.size},textLength=${n.text?.length},descriptionLength=${n.contentDescription?.length}," +
+                "scalarLength=${value?.length},scalarEquals=${expectedText?.let { it == value }}," +
+                "visible=${n.isVisibleToUser},enabled=${n.isEnabled},editable=${n.isEditable}," +
+                "checkable=${n.isCheckable},checked=${n.isChecked},bounds=$bounds"
+            for (i in 0 until n.childCount) n.getChild(i)?.let(pending::add)
+            n.recycle()
+        }
+        return nodes.joinToString(" | ")
     }
 }

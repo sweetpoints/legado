@@ -569,7 +569,17 @@ class HighlightGroupUiTest {
         expected.forEach { rule ->
             actual.reveal("highlight-management-row-${rule.uuid}")
             val label = rule.group?.takeIf { it.isNotBlank() }?.let { "[$it] ${rule.getDisplayName()}" } ?: rule.getDisplayName()
-            actual.await15("actual label and switch match native row") {
+            actual.await15("actual label and switch match native row", diagnostic = {
+                var native = "not sampled"
+                scenario!!.onActivity { host ->
+                    val current = host.viewModel.state.value
+                    native = "loaded=${current.loaded},rowsReady=${current.rowsReady},busy=${current.busy},canAct=${current.canAct}," +
+                        "visibleIndex=${current.visible.indexOfFirst { it.uuid == rule.uuid }}"
+                }
+                "expectedLength=${label.length},expectedEnabled=${rule.isEnabled},native=[$native]," +
+                    "label=[${actual.diagnostic("highlight-management-name-${rule.uuid}", label)}]," +
+                    "switch=[${actual.diagnostic("highlight-management-enabled-${rule.uuid}")}]"
+            }) {
                 actual.text("highlight-management-name-${rule.uuid}") == label && actual.checked("highlight-management-enabled-${rule.uuid}", rule.isEnabled)
             }
         }
