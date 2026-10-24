@@ -59,13 +59,33 @@ internal class NamedGroupsFlutterRobot(private val scenario: ActivityScenario<Ab
                 }
                 return
             }
-            val list = driver.node("named-group-list")
-            if (list != null) {
-                try { list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) } finally { list.recycle() }
-            }
+            scrollListForward()
             android.os.SystemClock.sleep(50)
         }
         fail("Group row was not rendered")
+    }
+    private fun scrollListForward(): Boolean {
+        // The identifier wraps ListView, whose Scrollable owns another semantics boundary.
+        // Only this list and its actual descendants may supply the advertised scroll action.
+        val root = driver.node("named-group-list") ?: return false
+        val nodes = ArrayDeque<AccessibilityNodeInfo>()
+        nodes.add(root)
+        while (nodes.isNotEmpty()) {
+            val node = nodes.removeFirst()
+            if (node.isEnabled && node.isVisibleToUser && node.actionList.any {
+                    it.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD }) {
+                try {
+                    // Do not try another node after dispatch, even if Android rejects this action.
+                    return node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                } finally {
+                    node.recycle()
+                    nodes.forEach { it.recycle() }
+                }
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let(nodes::add)
+            node.recycle()
+        }
+        return false
     }
     private fun editable(): AccessibilityNodeInfo? {
         val node = driver.node("named-group-name") ?: return null
