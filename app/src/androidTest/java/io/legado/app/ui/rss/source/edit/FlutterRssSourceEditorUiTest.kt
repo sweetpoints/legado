@@ -293,7 +293,7 @@ class FlutterRssSourceEditorUiTest {
             }
             assertEquals(0, launches)
             robot.input(RssSourceEditorField.SourceUrl, replacement)
-            robot.input(RssSourceEditorField.LoginUrl, "https://login.invalid/")
+            robot.input(RssSourceEditorField.LoginUrl, "https://login.invalid/", bulk = true, finishBulk = true)
             robot.menu("Login")
             driver.await("Saved login action delivered once") { launches == 1 }
             assertNull(appDb.rssSourceDao.getByKey(source.sourceUrl))
