@@ -1010,6 +1010,66 @@ abstract class AppLocalizations {
   /// **'Discard changes'**
   String get highlightEditorDiscard;
 
+  /// No description provided for @highlightManagerUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Highlight operation could not be completed. Retry or cancel.'**
+  String get highlightManagerUnavailable;
+
+  /// No description provided for @namedGroupsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Group management'**
+  String get namedGroupsTitle;
+
+  /// No description provided for @namedGroupsAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add group'**
+  String get namedGroupsAdd;
+
+  /// No description provided for @namedGroupsEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get namedGroupsEdit;
+
+  /// No description provided for @namedGroupsDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get namedGroupsDelete;
+
+  /// No description provided for @namedGroupsName.
+  ///
+  /// In en, this message translates to:
+  /// **'Group name'**
+  String get namedGroupsName;
+
+  /// No description provided for @namedGroupsConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get namedGroupsConfirm;
+
+  /// No description provided for @namedGroupsCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get namedGroupsCancel;
+
+  /// No description provided for @namedGroupsRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get namedGroupsRetry;
+
+  /// No description provided for @namedGroupsError.
+  ///
+  /// In en, this message translates to:
+  /// **'Group operation failed'**
+  String get namedGroupsError;
+
   /// No description provided for @pdfTitle.
   ///
   /// In en, this message translates to:
@@ -3121,6 +3181,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Page {page}'**
   String sourcesPage(int page);
+
+  /// No description provided for @txtTocManagerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'TXT TOC rules'**
+  String get txtTocManagerTitle;
+
+  /// No description provided for @txtTocManagerBridgeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Change not acknowledged. Edit again or retry.'**
+  String get txtTocManagerBridgeError;
 
   /// No description provided for @txtTocEditorTitle.
   ///
