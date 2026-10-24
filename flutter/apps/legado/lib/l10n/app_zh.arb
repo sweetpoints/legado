@@ -160,6 +160,12 @@
   "dictionaryEditorExitMessage": "尚未保存，是否继续编辑？",
   "dictionaryEditorKeep": "继续编辑",
   "dictionaryEditorDiscard": "放弃修改",
+  "highlightEditorBridgeError": "字段尚未确认，请重新编辑后重试。",
+  "highlightColorBridgeError": "颜色输入尚未确认，请重新编辑后重试。",
+  "highlightColorInvalidHex": "请输入有效的十六进制颜色。",
+  "highlightEditorPendingExit": "部分输入尚未确认，是否继续编辑？",
+  "highlightEditorKeep": "继续编辑",
+  "highlightEditorDiscard": "放弃修改",
   "pdfTitle": "PDF 阅读",
   "pdfImportTitle": "导入 PDF",
   "pdfImportDescription": "导入不超过 32 MiB 的本地 PDF，文档将保存在书库中供离线阅读。",
@@ -610,5 +616,20 @@
         "type": "int"
       }
     }
-  }
+  },
+  "txtTocEditorTitle": "TXT 目录规则",
+  "txtTocEditorName": "名称",
+  "txtTocEditorRegex": "正则",
+  "txtTocEditorReplacement": "替换为（支持 JavaScript）",
+  "txtTocEditorFullscreen": "全屏编辑",
+  "txtTocEditorSave": "保存",
+  "txtTocEditorMenu": "菜单",
+  "txtTocEditorCopy": "复制规则",
+  "txtTocEditorPaste": "粘贴规则",
+  "txtTocEditorBridgeError": "字段尚未确认，请重试编辑",
+  "txtTocEditorExit": "退出",
+  "txtTocEditorExitMessage": "尚未保存，是否继续编辑？",
+  "txtTocEditorKeep": "继续编辑",
+  "txtTocEditorDiscard": "放弃修改",
+  "txtTocEditorExample": "示例"
 }

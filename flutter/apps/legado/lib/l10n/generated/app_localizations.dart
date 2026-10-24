@@ -974,6 +974,42 @@ abstract class AppLocalizations {
   /// **'Discard changes'**
   String get dictionaryEditorDiscard;
 
+  /// No description provided for @highlightEditorBridgeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Field not acknowledged. Edit it again to retry.'**
+  String get highlightEditorBridgeError;
+
+  /// No description provided for @highlightColorBridgeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Color input not acknowledged. Edit it again to retry.'**
+  String get highlightColorBridgeError;
+
+  /// No description provided for @highlightColorInvalidHex.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid hexadecimal color.'**
+  String get highlightColorInvalidHex;
+
+  /// No description provided for @highlightEditorPendingExit.
+  ///
+  /// In en, this message translates to:
+  /// **'Some input has not been acknowledged. Keep editing?'**
+  String get highlightEditorPendingExit;
+
+  /// No description provided for @highlightEditorKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing'**
+  String get highlightEditorKeep;
+
+  /// No description provided for @highlightEditorDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes'**
+  String get highlightEditorDiscard;
+
   /// No description provided for @pdfTitle.
   ///
   /// In en, this message translates to:
@@ -3085,6 +3121,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Page {page}'**
   String sourcesPage(int page);
+
+  /// No description provided for @txtTocEditorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'TXT TOC rule'**
+  String get txtTocEditorTitle;
+
+  /// No description provided for @txtTocEditorName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get txtTocEditorName;
+
+  /// No description provided for @txtTocEditorRegex.
+  ///
+  /// In en, this message translates to:
+  /// **'Regex'**
+  String get txtTocEditorRegex;
+
+  /// No description provided for @txtTocEditorReplacement.
+  ///
+  /// In en, this message translates to:
+  /// **'Replacement (JavaScript supported)'**
+  String get txtTocEditorReplacement;
+
+  /// No description provided for @txtTocEditorFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Fullscreen editor'**
+  String get txtTocEditorFullscreen;
+
+  /// No description provided for @txtTocEditorSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get txtTocEditorSave;
+
+  /// No description provided for @txtTocEditorMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Menu'**
+  String get txtTocEditorMenu;
+
+  /// No description provided for @txtTocEditorCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy rule'**
+  String get txtTocEditorCopy;
+
+  /// No description provided for @txtTocEditorPaste.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste rule'**
+  String get txtTocEditorPaste;
+
+  /// No description provided for @txtTocEditorBridgeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Field not acknowledged. Edit it again to retry.'**
+  String get txtTocEditorBridgeError;
+
+  /// No description provided for @txtTocEditorExit.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit'**
+  String get txtTocEditorExit;
+
+  /// No description provided for @txtTocEditorExitMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing the unsaved rule?'**
+  String get txtTocEditorExitMessage;
+
+  /// No description provided for @txtTocEditorKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing'**
+  String get txtTocEditorKeep;
+
+  /// No description provided for @txtTocEditorDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes'**
+  String get txtTocEditorDiscard;
+
+  /// No description provided for @txtTocEditorExample.
+  ///
+  /// In en, this message translates to:
+  /// **'Example'**
+  String get txtTocEditorExample;
 }
 
 class _AppLocalizationsDelegate

@@ -456,6 +456,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dictionaryEditorDiscard => '放弃修改';
 
   @override
+  String get highlightEditorBridgeError => '字段尚未确认，请重新编辑后重试。';
+
+  @override
+  String get highlightColorBridgeError => '颜色输入尚未确认，请重新编辑后重试。';
+
+  @override
+  String get highlightColorInvalidHex => '请输入有效的十六进制颜色。';
+
+  @override
+  String get highlightEditorPendingExit => '部分输入尚未确认，是否继续编辑？';
+
+  @override
+  String get highlightEditorKeep => '继续编辑';
+
+  @override
+  String get highlightEditorDiscard => '放弃修改';
+
+  @override
   String get pdfTitle => 'PDF 阅读';
 
   @override
@@ -1540,4 +1558,49 @@ class AppLocalizationsZh extends AppLocalizations {
   String sourcesPage(int page) {
     return '第 $page 页';
   }
+
+  @override
+  String get txtTocEditorTitle => 'TXT 目录规则';
+
+  @override
+  String get txtTocEditorName => '名称';
+
+  @override
+  String get txtTocEditorRegex => '正则';
+
+  @override
+  String get txtTocEditorReplacement => '替换为（支持 JavaScript）';
+
+  @override
+  String get txtTocEditorFullscreen => '全屏编辑';
+
+  @override
+  String get txtTocEditorSave => '保存';
+
+  @override
+  String get txtTocEditorMenu => '菜单';
+
+  @override
+  String get txtTocEditorCopy => '复制规则';
+
+  @override
+  String get txtTocEditorPaste => '粘贴规则';
+
+  @override
+  String get txtTocEditorBridgeError => '字段尚未确认，请重试编辑';
+
+  @override
+  String get txtTocEditorExit => '退出';
+
+  @override
+  String get txtTocEditorExitMessage => '尚未保存，是否继续编辑？';
+
+  @override
+  String get txtTocEditorKeep => '继续编辑';
+
+  @override
+  String get txtTocEditorDiscard => '放弃修改';
+
+  @override
+  String get txtTocEditorExample => '示例';
 }
