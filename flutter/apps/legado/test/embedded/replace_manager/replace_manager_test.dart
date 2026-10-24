@@ -7,6 +7,15 @@ import 'package:material_ui/material_ui.dart';
 import 'package:legado_app/embedded/replace_manager/replace_manager_bridge.dart';
 import 'package:legado_app/embedded/replace_manager/replace_manager_page.dart';
 
+class RecordingReplaceBridge extends ReplaceManagerBridge {
+  final issued = <Map<String, Object?>>[];
+  @override
+  Future<void> command(String op, [Map<String, Object?> args = const {}]) {
+    issued.add({...args, 'op': op});
+    return super.command(op, args);
+  }
+}
+
 Map<String, Object?> fixture() => {
   'schemaVersion': 1,
   'binding': 'one',
@@ -726,6 +735,118 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
       semantics.dispose();
+    },
+  );
+  testWidgets(
+    'latest held pointer survives delayed native begin ACK without returning the preview to its origin',
+    (tester) async {
+      final bridge = RecordingReplaceBridge();
+      final gate = Completer<void>();
+      final beginObserved = Completer<void>();
+      final baseline = (native['rows']! as List).cast<Map>();
+      final previews = <List<Object?>>[];
+      before = (args) async {
+        if (args['op'] == 'beginDrag') {
+          beginObserved.complete();
+          await gate.future;
+        }
+        if (args['op'] == 'dragTo') {
+          final moving = native['dragging'];
+          final rows = baseline.where((r) => r['id'] != moving).toList();
+          final target = rows.indexWhere((r) => r['id'] == args['id']);
+          rows.insert(
+            target + (args['after'] == true ? 1 : 0),
+            baseline.singleWhere((r) => r['id'] == moving),
+          );
+          native = {...native, 'rows': rows};
+          previews.add(rows.map((r) => r['id']).toList());
+        }
+      };
+      await tester.pumpWidget(
+        MaterialApp(home: ReplaceManagerPage(bridge: bridge)),
+      );
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('Rule 1')),
+      );
+      try {
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(beginObserved.isCompleted, true);
+        expect(native['dragging'], null);
+        final last = tester.getRect(find.text('Rule 3'));
+        await gesture.moveTo(Offset(last.center.dx, last.center.dy + 20));
+        await tester.pump();
+        expect(commands.map((v) => v['op']).toList(), ['beginDrag']);
+        gate.complete();
+        await tester.pump();
+        // No new pointer movement: hold the physical target across begin ACK and periodic pumps.
+        for (var i = 0; i < 4; i++) {
+          await tester.pump(const Duration(milliseconds: 40));
+        }
+        expect(
+          (native['rows']! as List).map((v) => (v as Map)['id']).toList(),
+          [2, 3, 1, 4],
+          reason:
+              'nativePreviewTrace=$previews delivered=${commands.where((v) => v["op"] == "dragTo").map((v) => {"id": v["id"], "after": v["after"]}).toList()}',
+        );
+        expect(native['dragging'], 1);
+      } finally {
+        if (!gate.isCompleted) gate.complete();
+        await gesture.up();
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpAndSettle();
+      }
+    },
+  );
+  testWidgets(
+    'move updates await the begin ACK and releasing before a late ACK never revives the gesture',
+    (tester) async {
+      final bridge = RecordingReplaceBridge();
+      final gate = Completer<void>();
+      final beginObserved = Completer<void>();
+      before = (args) async {
+        if (args['op'] == 'beginDrag') {
+          beginObserved.complete();
+          await gate.future;
+        }
+      };
+      await tester.pumpWidget(
+        MaterialApp(home: ReplaceManagerPage(bridge: bridge)),
+      );
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('Rule 1')),
+      );
+      var released = false;
+      try {
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(beginObserved.isCompleted, true);
+        await gesture.moveTo(tester.getCenter(find.text('Rule 3')));
+        await tester.pump();
+        expect(
+          bridge.issued.where((v) => v['op'] == 'dragTo'),
+          isEmpty,
+          reason: 'Do not compute or queue a preview from a pre-ACK native snapshot',
+        );
+        await gesture.up();
+        released = true;
+        await tester.pump();
+        gate.complete();
+        await tester.pump();
+        for (var i = 0; i < 4; i++) {
+          await tester.pump(const Duration(milliseconds: 40));
+        }
+        expect(native['dragging'], null);
+        expect(bridge.issued.where((v) => v['op'] == 'dragTo'), isEmpty);
+        expect(commands.where((v) => v['op'] == 'finishDrag').length, 1);
+      } finally {
+        if (!gate.isCompleted) gate.complete();
+        if (!released) await gesture.up();
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpAndSettle();
+      }
     },
   );
 }

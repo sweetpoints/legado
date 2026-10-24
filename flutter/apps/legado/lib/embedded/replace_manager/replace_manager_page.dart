@@ -165,6 +165,7 @@ class _ReplaceManagerPageState extends State<ReplaceManagerPage>
     finishing = false;
     gestureFailed = false;
     lastTarget = null;
+    pointer = position;
     final token = ++gestureToken;
     final starting = bridge.command(
       selection ? 'beginSelection' : 'beginDrag',
@@ -185,7 +186,6 @@ class _ReplaceManagerPageState extends State<ReplaceManagerPage>
       await finishGesture(true);
       return;
     }
-    pointer = position;
     timer = Timer.periodic(const Duration(milliseconds: 40), (_) {
       if (pointer != null) pump();
     });
@@ -200,6 +200,7 @@ class _ReplaceManagerPageState extends State<ReplaceManagerPage>
   void pump() {
     if (anchor == null ||
         finishing ||
+        gestureStart != null ||
         gestureFlight != null ||
         pointer == null) {
       return;
