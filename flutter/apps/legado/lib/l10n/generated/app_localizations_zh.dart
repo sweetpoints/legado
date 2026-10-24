@@ -474,6 +474,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get highlightEditorDiscard => '放弃修改';
 
   @override
+  String get highlightManagerUnavailable => '高亮操作未完成，请重试或取消。';
+
+  @override
+  String get namedGroupsTitle => '分组管理';
+
+  @override
+  String get namedGroupsAdd => '添加分组';
+
+  @override
+  String get namedGroupsEdit => '编辑';
+
+  @override
+  String get namedGroupsDelete => '删除';
+
+  @override
+  String get namedGroupsName => '分组名称';
+
+  @override
+  String get namedGroupsConfirm => '确定';
+
+  @override
+  String get namedGroupsCancel => '取消';
+
+  @override
+  String get namedGroupsRetry => '重试';
+
+  @override
+  String get namedGroupsError => '分组操作失败';
+
+  @override
   String get pdfTitle => 'PDF 阅读';
 
   @override
@@ -1558,6 +1588,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String sourcesPage(int page) {
     return '第 $page 页';
   }
+
+  @override
+  String get txtTocManagerTitle => 'TXT 目录规则';
+
+  @override
+  String get txtTocManagerBridgeError => '更改尚未确认，请重新编辑或重试。';
 
   @override
   String get txtTocEditorTitle => 'TXT 目录规则';
