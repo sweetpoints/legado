@@ -369,9 +369,12 @@ class _EditorState extends State<TxtTocRuleEditorPage> {
                                         ),
                                       ),
                                     ),
-                                  if (s == null || s.loadFailed)
+                                  // A pending initial snapshot is still loading. Its reconnect
+                                  // action must never impersonate the native rule-load Retry.
+                                  if ((s == null && failed) ||
+                                      s?.loadFailed == true)
                                     tagged(
-                                      'retry',
+                                      s == null ? 'bridge-retry' : 'retry',
                                       TextButton(
                                         onPressed: () => unawaited(
                                           s == null
