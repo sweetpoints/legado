@@ -202,6 +202,37 @@ void main() {
     },
   );
   testWidgets(
+    'failed load Retry sends one typed retry and reflects native reload without field edits',
+    (tester) async {
+      native = {
+        ...fixture(),
+        'loadFailed': true,
+        'canEdit': false,
+        'error': 'missing original',
+      };
+      final bridge = TxtTocRuleEditorBridge();
+      await app(tester, bridge: bridge);
+      expect(find.text('Retry'), findsOneWidget);
+      await tester.tap(find.text('Retry'));
+      await tester.pump();
+      await tester.pump();
+      expect(calls.map((call) => call['op']), ['retry']);
+      expect(calls.single['generation'], native['generation']);
+      bridge.accept({
+        ...fixture(revision: 9),
+        'Name': 'restored',
+        'Regex': r'^Retry',
+      });
+      await tester.pump();
+      expect(find.text('Retry'), findsNothing);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'restored',
+      );
+      expect(calls.where((call) => call['op'] == 'field'), isEmpty);
+    },
+  );
+  testWidgets(
     'dirty exit offers keep and explicit discard actions in Chinese',
     (tester) async {
       await app(tester, locale: 'zh');

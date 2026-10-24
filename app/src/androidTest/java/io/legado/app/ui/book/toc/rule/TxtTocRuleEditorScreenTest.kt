@@ -273,8 +273,40 @@ class TxtTocRuleEditorScreenTest {
         driver.await("Missing rule load error") { state { it.loadFailed } }
         driver.awaitIdentifier("txt-toc-editor-retry")
         runBlocking(Dispatchers.IO) { appDb.txtTocRuleDao.insert(TxtTocRule(otherId, "restored", "^Retry", "rep", "sample", 123, false)) }
-        driver.click("txt-toc-editor-retry")
-        driver.await("Reloaded original rule") { state { !it.loading && !it.loadFailed && it.name == "restored" } }
+        assertEquals("restored", runBlocking(Dispatchers.IO) { appDb.txtTocRuleDao.get(otherId)?.name })
+        // Retry is an action of this button, never of a clickable ancestor such as the backdrop.
+        // Wait for its actual advertised descendant and dispatch the business action only once.
+        driver.await("Actual owned Retry button advertises CLICK") {
+            val queue = ArrayDeque<AccessibilityNodeInfo>()
+            driver.node("txt-toc-editor-retry")?.let(queue::add) ?: return@await false
+            var dispatched = false
+            while (queue.isNotEmpty()) {
+                val node = queue.removeFirst()
+                if (!dispatched && node.isVisibleToUser && node.isEnabled && node.isClickable &&
+                    node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }) {
+                    dispatched = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                }
+                for (index in 0 until node.childCount) node.getChild(index)?.let(queue::add)
+                node.recycle()
+            }
+            dispatched
+        }
+        var receipt = "missing dialog"
+        try {
+            driver.await("Reloaded original rule") {
+                var identity = "dialog missing"
+                scenario.onActivity { host -> dialog(host)?.let { editor ->
+                    identity = "requestedId=${editor.arguments?.getLong("id")},nativeId=${editor.viewModel.currentRule().id}"
+                } }
+                state {
+                    receipt = "$identity,loading=${it.loading},loadFailed=${it.loadFailed},finished=${it.finished}," +
+                        "confirmExit=${it.confirmExit},nameMatches=${it.name == "restored"},error=${it.error}"
+                    !it.loading && !it.loadFailed && !it.finished && it.name == "restored"
+                }
+            }
+        } catch (failure: AssertionError) {
+            throw AssertionError("Retry Room id=$otherId; native receipt: $receipt", failure)
+        }
         driver.await("Actual retry field") { driver.text("txt-toc-editor-Name") == "restored" }
         driver.click("txt-toc-editor-save"); closed()
         val saved = runBlocking(Dispatchers.IO) { appDb.txtTocRuleDao.get(otherId)!! }
