@@ -559,4 +559,63 @@ void main() {
       await bridge.close();
     },
   );
+  testWidgets(
+    'native Back after modal cancel ACK before a new frame closes the manager',
+    (tester) async {
+      native = {...native, 'dialog': 'AddGroup'};
+      await tester.pumpWidget(const MaterialApp(home: ReplaceManagerPage()));
+      await tester.pumpAndSettle();
+      final modal = find.byWidgetPredicate(
+        (w) =>
+            w is Semantics &&
+            w.properties.identifier == 'replace-rule-dialog-field',
+      );
+      expect(modal, findsOneWidget);
+      await tester.binding.handlePopRoute();
+      // Drain channel ACK microtasks without pumping the scheduled rebuild frame.
+      for (var i = 0; i < 32; i++) {
+        await Future<void>.value();
+      }
+      expect(native['dialog'], null);
+      expect(commands.map((v) => v['op']).toList(), ['cancelDialog']);
+      expect(modal, findsOneWidget);
+      await tester.binding.handlePopRoute();
+      for (var i = 0; i < 32; i++) {
+        await Future<void>.value();
+      }
+      expect(commands.map((v) => v['op']).toList(), ['cancelDialog', 'back']);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    },
+  );
+  testWidgets(
+    'second native Back queued before the modal ACK resolves against the acknowledged root',
+    (tester) async {
+      native = {...native, 'dialog': 'AddGroup'};
+      final gate = Completer<void>();
+      before = (args) async {
+        if (args['op'] == 'cancelDialog') await gate.future;
+      };
+      await tester.pumpWidget(const MaterialApp(home: ReplaceManagerPage()));
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      for (var i = 0; i < 32; i++) {
+        await Future<void>.value();
+      }
+      await tester.binding.handlePopRoute();
+      for (var i = 0; i < 32; i++) {
+        await Future<void>.value();
+      }
+      expect(native['dialog'], 'AddGroup');
+      expect(commands.map((v) => v['op']).toList(), ['cancelDialog']);
+      gate.complete();
+      for (var i = 0; i < 32; i++) {
+        await Future<void>.value();
+      }
+      expect(commands.map((v) => v['op']).toList(), ['cancelDialog', 'back']);
+      expect(native['dialog'], null);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    },
+  );
 }

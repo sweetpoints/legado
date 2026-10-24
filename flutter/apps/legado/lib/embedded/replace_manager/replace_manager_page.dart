@@ -116,7 +116,9 @@ class _ReplaceManagerPageState extends State<ReplaceManagerPage>
     Map<String, Object?> values = const {},
   ]) async {
     try {
-      await bridge.command(op, values);
+      await (op == 'navigateBack'
+          ? bridge.navigateBack()
+          : bridge.command(op, values));
       if (mounted) setState(() => failed = false);
     } catch (_) {
       if (mounted) setState(() => failed = true);
@@ -620,9 +622,7 @@ class _ReplaceManagerPageState extends State<ReplaceManagerPage>
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
-          unawaited(
-            s.dialog != null ? command('cancelDialog') : command('back'),
-          );
+          unawaited(command('navigateBack'));
         }
       },
       child: Stack(

@@ -102,14 +102,29 @@ class ReplaceManagerBridge {
 
   Future<void> refresh() async =>
       _accept(_decode(await channel.invokeMethod<Object?>('snapshot')));
-  Future<void> command(String op, [Map<String, Object?> args = const {}]) {
+  Future<void> command(String op, [Map<String, Object?> args = const {}]) =>
+      _enqueue(op, args, false);
+
+  /// Hardware Back resolves modal/root ownership only after preceding ACKs settle.
+  Future<void> navigateBack() => _enqueue('back', const {}, true);
+
+  Future<void> _enqueue(
+    String requested,
+    Map<String, Object?> args,
+    bool modalAware,
+  ) {
     final binding = latest?.binding;
     final values = Map<String, Object?>.unmodifiable(args);
-    final field = (op == 'query' || op == 'draft') ? op : null;
+    final field = (requested == 'query' || requested == 'draft')
+        ? requested
+        : null;
     final task = _queue.then((_) async {
       if (_closed || binding == null || latest?.binding != binding) {
         throw StateError('replace_manager_view_changed');
       }
+      final op = modalAware && latest?.dialog != null
+          ? 'cancelDialog'
+          : requested;
       // Decide after preceding field commands settle. The user's modal cancellation
       // explicitly discards a rejected background query, with its own native ACK.
       if (op == 'cancelDialog' &&
