@@ -1,38 +1,9 @@
 package io.legado.app.ui.book.source.manage
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.getValue
-import androidx.fragment.app.viewModels
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.createSavedStateHandle
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
-import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.data.repository.BookSourceGroupRepository
-import io.legado.app.ui.group.NamedGroupRoute
-import io.legado.app.ui.group.NamedGroupViewModel
-import io.legado.app.utils.setLayout
+import io.legado.app.ui.group.NamedGroupDialog
 
-class GroupManageDialog : BaseComposeDialogFragment() {
-    private val model by
-        viewModels<NamedGroupViewModel> {
-            viewModelFactory {
-                initializer {
-                    NamedGroupViewModel(BookSourceGroupRepository(), createSavedStateHandle())
-                }
-            }
-        }
-
-    override fun onStart() {
-        super.onStart()
-        setLayout(0.9f, 0.9f)
-    }
-
-    @Composable
-    override fun Content() {
-        val state by model.state.collectAsStateWithLifecycle()
-        SideEffect { isCancelable = !state.busy }
-        NamedGroupRoute(model, ::dismissAllowingStateLoss)
-    }
+class GroupManageDialog : NamedGroupDialog() {
+    override val groupKind = "book"
+    override fun repository() = BookSourceGroupRepository()
 }

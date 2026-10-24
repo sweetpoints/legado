@@ -1,0 +1,11 @@
+{
+  "namedGroupsTitle": "分组管理",
+  "namedGroupsAdd": "添加分组",
+  "namedGroupsEdit": "编辑",
+  "namedGroupsDelete": "删除",
+  "namedGroupsName": "分组名称",
+  "namedGroupsConfirm": "确定",
+  "namedGroupsCancel": "取消",
+  "namedGroupsRetry": "重试",
+  "namedGroupsError": "分组操作失败"
+}
