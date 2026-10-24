@@ -2,6 +2,8 @@ package io.legado.app.ui.group
 
 import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.ui.about.AboutActivity
@@ -132,8 +134,48 @@ internal class NamedGroupsFlutterRobot(private val scenario: ActivityScenario<Ab
         assertTrue("Original Room receipt deadline", condition())
     }
     fun assertName(text: String) {
-        driver.await("Native and actual group name acknowledge text") {
-            host().model.state.value.name == text && driver.text("named-group-name") == text
+        var diagnostic = "No observation"
+        try {
+            driver.await("Native and actual group name acknowledge text") {
+                var nativeEquals = false
+                var native = "nativeHostMissing=true"
+                scenario.onActivity { activity ->
+                    val dialog = activity.supportFragmentManager.fragments.filterIsInstance<NamedGroupDialog>().singleOrNull()
+                    dialog?.let {
+                        val state = it.model.state.value
+                        nativeEquals = state.name == text
+                        val decor = it.dialog?.window?.decorView
+                        val insets = decor?.let(ViewCompat::getRootWindowInsets)
+                        native = "nativeNameEquals=$nativeEquals,nativeLength=${state.name.length}," +
+                            "editing=${state.editing},busy=${state.busy},loading=${state.loading}," +
+                            "recoveryFailed=${state.recoveryFailed},uncertain=${state.mutationUncertain}," +
+                            "nativeSelection=${state.selectionStart}..${state.selectionEnd},errorPresent=${state.error != null}," +
+                            "decorAttached=${decor?.isAttachedToWindow},laidOut=${decor?.isLaidOut}," +
+                            "windowFocused=${decor?.hasWindowFocus()},decorShown=${decor?.isShown}," +
+                            "decorSize=${decor?.width}x${decor?.height},lastDrawUptime=${decor?.drawingTime}," +
+                            "observedUptime=${android.os.SystemClock.uptimeMillis()}," +
+                            "imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime())}," +
+                            "imeBottom=${insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom}"
+                    }
+                }
+                val node = driver.node("named-group-name")
+                var actualEquals = text.isEmpty()
+                val actual = node?.let {
+                    try {
+                        val rendered = it.text?.toString().orEmpty()
+                        actualEquals = rendered == text
+                        "actualFound=true,actualLength=${rendered.length},actualNameEquals=$actualEquals," +
+                            "actualFocused=${it.isFocused},actualEditable=${it.isEditable},actualEnabled=${it.isEnabled}," +
+                            "actualSelection=${it.textSelectionStart}..${it.textSelectionEnd}"
+                    } finally { it.recycle() }
+                } ?: "actualFound=false,actualLength=-1,actualNameEquals=$actualEquals"
+                diagnostic = "$native;$actual;expectedLength=${text.length}"
+                // Keep the same two name-equality predicates and the driver's original deadline.
+                nativeEquals && actualEquals
+            }
+        } catch (failure: AssertionError) {
+            // Only scalar observations: never include group names or draft contents in logs.
+            throw AssertionError("${failure.message}; $diagnostic", failure)
         }
     }
     override fun close() { driver.close() }
