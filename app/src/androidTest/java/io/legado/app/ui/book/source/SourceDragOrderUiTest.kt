@@ -319,7 +319,62 @@ class SourceDragOrderUiTest {
                 filter(Kind.BOOK, "")
                 awaitItems(Kind.BOOK, scenario, if (descending) expected.reversed() else expected)
                 filter(Kind.BOOK, "group:$group")
-                waitRows(expectedVisible)
+                if (!descending && !removeTarget) {
+                    // Distinguish a rejected/stale query from native order and viewport failures.
+                    // This is the original predicate and 30s wait: no input or draw is repeated.
+                    val receipts = arrayListOf<String>()
+                    try {
+                        waitUntil("book filtered rows after restoring group") {
+                            var nativeMatches = false
+                            var receipt = "native not sampled"
+                            scenario.onActivity { activity ->
+                                val state = activity.managerModel.state.value
+                                nativeMatches = state.rows.map { it.url } == expectedVisible
+                                val decor = activity.window.decorView
+                                val insets = ViewCompat.getRootWindowInsets(decor)
+                                receipt = "queryMatches=${state.query == "group:$group"},loading=${state.loading}," +
+                                    "busy=${state.busy},nativeCount=${state.rows.size},nativeOrder=${state.rows.take(24).map { keys.indexOf(it.url) }}," +
+                                    "nativeMatches=$nativeMatches,focused=${decor.hasWindowFocus()}," +
+                                    "viewport=${decor.width}x${decor.height}," +
+                                    "imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime())}," +
+                                    "imeBottom=${insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom}"
+                            }
+                            val actualQuery = flutter.node("source-manager-query")
+                            receipt += actualQuery?.let { node ->
+                                try { ",actualQueryMatches=${node.text?.toString() == "group:$group"}" }
+                                finally { node.recycle() }
+                            } ?: ",actualQueryMissing=true"
+                            val bounds = expectedVisible.mapIndexed { index, key ->
+                                flutter.node("source-manager-row:$key")?.let { node ->
+                                    try {
+                                        val rect = android.graphics.Rect().also(node::getBoundsInScreen)
+                                        receipt += ";row$index=$rect,visible=${node.isVisibleToUser},window=${node.windowId}"
+                                        rect
+                                    } finally { node.recycle() }
+                                }.also { if (it == null) receipt += ";row$index=missing" }
+                            }
+                            val renderedMatches = bounds.all { it != null && it.height() > 0 } &&
+                                bounds.zipWithNext().all { (first, next) -> first!!.centerY() < next!!.centerY() }
+                            receipt += ",renderedMatches=$renderedMatches"
+                            if (receipt != receipts.lastOrNull()) {
+                                if (receipts.size == 24) receipts.removeAt(0)
+                                receipts += receipt
+                            }
+                            nativeMatches && renderedMatches
+                        }
+                    } catch (failure: AssertionError) {
+                        val output = File(context.getExternalFilesDir(null), "ui-regression/book-filter-restore-receipt.txt")
+                        runCatching {
+                            output.parentFile!!.mkdirs()
+                            output.writeText(receipts.joinToString("\n"))
+                            screenshot("book-filter-restore-failure")
+                        }.onFailure(failure::addSuppressed)
+                        failure.addSuppressed(AssertionError(receipts.lastOrNull() ?: "no filter receipt"))
+                        throw failure
+                    }
+                } else {
+                    waitRows(expectedVisible)
+                }
                 scenario.recreate()
                 waitRows(expectedVisible)
                 screenshot("book-$descending-$removeTarget-recreated")
