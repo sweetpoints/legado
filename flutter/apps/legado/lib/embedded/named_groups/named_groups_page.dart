@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart' show RendererBinding;
+import 'package:flutter/semantics.dart' show SemanticsBinding;
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -39,9 +42,105 @@ class _NamedGroupsState extends State<NamedGroupsPage> {
     );
   }
 
+  int _debugSemanticsCount = 0;
+  int? _debugViewId;
+
+  void _observeSemanticsAction(ui.SemanticsActionEvent event) {
+    if (!kDebugMode ||
+        (event.type != ui.SemanticsAction.setText &&
+            event.type != ui.SemanticsAction.setSelection)) {
+      return;
+    }
+    _traceSemanticsAction('action', event);
+  }
+
+  void _traceSemanticsAction(String phase, [ui.SemanticsActionEvent? event]) {
+    // Reserve one of the 64 records for disposal proof, even when actions flood.
+    if (!kDebugMode ||
+        _debugSemanticsCount >= 64 ||
+        (phase != 'disposed' && _debugSemanticsCount >= 63)) {
+      return;
+    }
+    final sequence = ++_debugSemanticsCount;
+    try {
+      bool viewFound = false, ownerFound = false;
+      bool? nodeExists, hasSetText, hasSelection, identifierMatches;
+      int? nodeValueLength;
+      if (event != null) {
+        for (final renderView in RendererBinding.instance.renderViews) {
+          if (renderView.flutterView.viewId != event.viewId) continue;
+          viewFound = true;
+          final owner = renderView.owner?.semanticsOwner;
+          ownerFound = owner != null;
+          if (owner != null) {
+            final node = owner.getSemanticsNode(event.nodeId);
+            nodeExists = node != null;
+            final data = node?.getSemanticsData();
+            hasSetText = data?.hasAction(ui.SemanticsAction.setText);
+            hasSelection = data?.hasAction(ui.SemanticsAction.setSelection);
+            identifierMatches = data == null
+                ? null
+                : data.identifier == 'named-group-name';
+            nodeValueLength = data?.value.length;
+          }
+          break;
+        }
+      }
+      final arguments = event?.arguments;
+      final base = arguments is Map && arguments['base'] is int
+          ? arguments['base']
+          : null;
+      final extent = arguments is Map && arguments['extent'] is int
+          ? arguments['extent']
+          : null;
+      final type = event == null
+          ? 'none'
+          : event.type == ui.SemanticsAction.setText
+          ? 'setText'
+          : 'setSelection';
+      debugPrint(
+        'NamedGroupsSemantics#$sequence '
+        'time=${DateTime.now().microsecondsSinceEpoch} phase=$phase '
+        'pageIdentity=${identityHashCode(this)} ownViewId=$_debugViewId '
+        'viewId=${event?.viewId} nodeId=${event?.nodeId} action=$type '
+        'argumentLength=${arguments is String ? arguments.length : null} '
+        'argumentSelection=$base..$extent viewFound=$viewFound ownerFound=$ownerFound '
+        'nodeExists=$nodeExists hasSetText=$hasSetText hasSelection=$hasSelection '
+        'identifierMatches=$identifierMatches nodeValueLength=$nodeValueLength '
+        'generation=${state?.generation} revision=${state?.revision} '
+        'focused=${focus.hasFocus} controllerLength=${controller.text.length} '
+        'selection=${controller.selection.baseOffset}..${controller.selection.extentOffset} '
+        'reflecting=$reflecting pending=${pending != null} endingEdit=$endingEdit '
+        'editing=${state?.editing} busy=${state?.busy} mounted=$mounted',
+      );
+    } catch (error) {
+      // A passive observer must never alter or interrupt framework action dispatch.
+      try {
+        debugPrint(
+          'NamedGroupsSemantics#$sequence '
+          'phase=$phase lookupFailed=${error.runtimeType}',
+        );
+      } catch (_) {
+        /* Diagnostic output must never interrupt dispatch. */
+      }
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (kDebugMode) _debugViewId = View.of(context).viewId;
+  }
+
   @override
   void initState() {
     super.initState();
+    if (kDebugMode) {
+      SemanticsBinding.instance.addSemanticsActionListener(
+        _observeSemanticsAction,
+      );
+      _traceSemanticsAction('installed');
+    }
     controller.addListener(changed);
     subscription = bridge.snapshots.stream.listen(
       accept,
@@ -404,6 +503,12 @@ class _NamedGroupsState extends State<NamedGroupsPage> {
 
   @override
   void dispose() {
+    if (kDebugMode) {
+      SemanticsBinding.instance.removeSemanticsActionListener(
+        _observeSemanticsAction,
+      );
+      _traceSemanticsAction('disposed');
+    }
     unawaited(subscription?.cancel());
     unawaited(bridge.close());
     controller.dispose();
