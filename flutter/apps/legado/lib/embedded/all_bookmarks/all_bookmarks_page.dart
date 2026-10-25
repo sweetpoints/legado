@@ -44,6 +44,7 @@ class _AllBookmarksState extends State<AllBookmarksPage> {
   StreamSubscription<AllBookmarksSnapshot>? subscription;
   AllBookmarksSnapshot? state;
   bool restored = false, failed = false;
+  bool connecting = false, bootstrapFailed = false;
   (int, int)? pendingScroll;
   Future<void>? scrollFlight;
   List<_Entry> entries = [];
@@ -54,16 +55,38 @@ class _AllBookmarksState extends State<AllBookmarksPage> {
     subscription = bridge.snapshots.stream.listen(
       accept,
       onError: (Object _) {
-        if (mounted) setState(() => failed = true);
+        if (mounted) {
+          setState(() {
+            failed = true;
+            if (state == null) bootstrapFailed = true;
+          });
+        }
       },
     );
-    unawaited(() async {
-      try {
-        await bridge.start();
-      } catch (_) {
-        if (mounted) setState(() => failed = true);
+    unawaited(connect());
+  }
+
+  Future<void> connect() async {
+    if (connecting) return;
+    setState(() {
+      connecting = true;
+      bootstrapFailed = false;
+      failed = false;
+    });
+    try {
+      // Bootstrap has no generation yet: reconnect by snapshot, never by a
+      // generation-bound native command. Keep first-pending distinct from error.
+      await bridge.start();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          failed = true;
+          bootstrapFailed = state == null;
+        });
       }
-    }());
+    } finally {
+      if (mounted) setState(() => connecting = false);
+    }
   }
 
   void accept(AllBookmarksSnapshot next) {
@@ -101,6 +124,8 @@ class _AllBookmarksState extends State<AllBookmarksPage> {
       previous = row;
     }
     setState(() {
+      if (state == null || bootstrapFailed) failed = false;
+      bootstrapFailed = false;
       state = next;
       entries = nextEntries;
     });
@@ -328,10 +353,19 @@ class _AllBookmarksState extends State<AllBookmarksPage> {
         body: SafeArea(
           child: Column(
             children: [
-              if (s == null || !s.loaded || s.exporting)
+              if ((s == null && !bootstrapFailed) ||
+                  (s != null && (!s.loaded || s.exporting)))
                 const LinearProgressIndicator(),
               if (failed || s?.error != null) Text(l.allBookmarksError),
-              if (s?.loaded != true)
+              if (s == null && bootstrapFailed)
+                tag(
+                  'bridge-retry',
+                  TextButton(
+                    onPressed: connecting ? null : () => unawaited(connect()),
+                    child: Text(l.allBookmarksRetry),
+                  ),
+                ),
+              if (s != null && (!s.loaded || s.error != null))
                 tag(
                   'retry',
                   TextButton(

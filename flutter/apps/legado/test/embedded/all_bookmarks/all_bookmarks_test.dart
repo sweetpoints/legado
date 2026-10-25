@@ -37,11 +37,17 @@ void main() {
   late List<Map> calls;
   Completer<void>? gate;
   bool reject = false;
+  bool failSnapshot = false;
+  int snapshotRequests = 0;
+  Completer<Object?>? snapshotGate;
   setUp(() {
     native = fixture();
     calls = [];
     gate = null;
     reject = false;
+    failSnapshot = false;
+    snapshotRequests = 0;
+    snapshotGate = null;
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
       events,
       (_) async => null,
@@ -49,7 +55,12 @@ void main() {
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
       call,
     ) async {
-      if (call.method == 'snapshot') return native;
+      if (call.method == 'snapshot') {
+        snapshotRequests++;
+        if (snapshotGate != null) return await snapshotGate!.future;
+        if (failSnapshot) throw PlatformException(code: 'snapshot_unavailable');
+        return native;
+      }
       calls.add(call.arguments as Map);
       await gate?.future;
       if (reject) throw PlatformException(code: 'private_error');
@@ -65,6 +76,7 @@ void main() {
     WidgetTester tester,
     AllBookmarksBridge bridge, {
     String locale = 'en',
+    bool settle = true,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -77,7 +89,12 @@ void main() {
         home: AllBookmarksPage(bridge: bridge),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+      await tester.pump();
+    }
   }
 
   test('native identity strings preserve full Long and duplicate identities fail closed', () {
@@ -298,6 +315,101 @@ void main() {
       await tester.pumpAndSettle();
       expect(calls.single['id'], '9223372036854775806');
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'pending first snapshot is loading only with no premature retry commands',
+    (tester) async {
+      snapshotGate = Completer<Object?>();
+      try {
+        await app(tester, AllBookmarksBridge(), settle: false);
+        expect(snapshotRequests, 1);
+        expect(tester.takeException(), isNull);
+        expect(find.byType(LinearProgressIndicator), findsOneWidget);
+        expect(find.bySemanticsIdentifier('all-bookmarks-retry'), findsNothing);
+        expect(
+          find.bySemanticsIdentifier('all-bookmarks-bridge-retry'),
+          findsNothing,
+        );
+        expect(calls, isEmpty);
+      } finally {
+        snapshotGate!.complete(native);
+        await tester.pumpAndSettle();
+      }
+    },
+  );
+  testWidgets(
+    'failed first native snapshot reconnects via bridge retry without a null-generation command',
+    (tester) async {
+      failSnapshot = true;
+      await app(tester, AllBookmarksBridge(), settle: false);
+      expect(snapshotRequests, 1);
+      expect(tester.takeException(), isNull);
+      expect(
+        find.bySemanticsIdentifier('all-bookmarks-bridge-retry'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsIdentifier('all-bookmarks-retry'), findsNothing);
+      failSnapshot = false;
+      await tester.tap(
+        find.bySemanticsIdentifier('all-bookmarks-bridge-retry'),
+      );
+      await tester.pumpAndSettle();
+      expect(snapshotRequests, 2);
+      expect(calls, isEmpty);
+      expect(
+        find.bySemanticsIdentifier('all-bookmarks-row-9223372036854775806'),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier('all-bookmarks-bridge-retry'),
+        findsNothing,
+      );
+      expect(find.text('Unable to load bookmarks. Try again.'), findsNothing);
+    },
+  );
+  testWidgets(
+    'malformed first snapshot uses the same bridge reconnect rather than native retry',
+    (tester) async {
+      native = {
+        ...fixture(),
+        'rows': ['malformed'],
+      };
+      await app(tester, AllBookmarksBridge(), settle: false);
+      expect(tester.takeException(), isNull);
+      expect(
+        find.bySemanticsIdentifier('all-bookmarks-bridge-retry'),
+        findsOneWidget,
+      );
+      native = fixture();
+      await tester.tap(
+        find.bySemanticsIdentifier('all-bookmarks-bridge-retry'),
+      );
+      await tester.pumpAndSettle();
+      expect(snapshotRequests, 2);
+      expect(calls, isEmpty);
+      expect(
+        find.bySemanticsIdentifier('all-bookmarks-row-9223372036854775806'),
+        findsOneWidget,
+      );
+    },
+  );
+  testWidgets(
+    'native loaded failure retains typed retry without reconnecting the bridge',
+    (tester) async {
+      native = {...fixture(), 'loaded': false, 'error': 'native load failed'};
+      await app(tester, AllBookmarksBridge(), settle: false);
+      expect(
+        find.bySemanticsIdentifier('all-bookmarks-bridge-retry'),
+        findsNothing,
+      );
+      expect(find.bySemanticsIdentifier('all-bookmarks-retry'), findsOneWidget);
+      await tester.tap(find.bySemanticsIdentifier('all-bookmarks-retry'));
+      await tester.pump();
+      await tester.pump();
+      expect(snapshotRequests, 1);
+      expect(calls.single, {'op': 'retry', 'generation': 1});
     },
   );
 }
