@@ -88,7 +88,8 @@ abstract class DiagnosticsDialog : BaseDialogFragment(0) {
             "previous", "next" -> {
                 require(args.keys == setOf("binding", "sequence", "op") && !busy())
                 viewportEpoch.retire()
-                page += if (op == "next") 1 else -1; rememberScroll(0, 0.0)
+                page = DiagnosticsViewport.move(page, rows().size, if (op == "next") 1 else -1)
+                rememberScroll(0, 0.0)
             }
             "link" -> {
                 require(args.keys == setOf("binding", "sequence", "op", "id", "index") && !busy())

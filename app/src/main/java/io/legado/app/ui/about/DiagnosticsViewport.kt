@@ -7,6 +7,12 @@ internal data class DiagnosticsViewportProjection(val page: Int, val pages: Int,
 
 /** Native-only viewport receipt. The anchor is a digest, never a file path or log body. */
 internal object DiagnosticsViewport {
+    fun move(requestedPage: Int, rowCount: Int, delta: Int): Int {
+        require(rowCount >= 0 && delta in setOf(-1, 1))
+        val lastPage = maxOf(0, (rowCount - 1) / 100)
+        return (requestedPage.coerceIn(0, lastPage) + delta).coerceIn(0, lastPage)
+    }
+
     fun anchor(id: String): String = MessageDigest.getInstance("SHA-256")
         .digest(id.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 
