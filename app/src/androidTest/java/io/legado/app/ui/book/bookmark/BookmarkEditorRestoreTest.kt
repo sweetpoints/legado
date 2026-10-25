@@ -46,31 +46,128 @@ class BookmarkEditorRestoreTest {
         throw AssertionError("Bookmark editor did not restore/close")
     }
 
-    private fun reveal(key: String) {
-        androidx.test.espresso.Espresso.closeSoftKeyboard()
-        driver.await("visible bookmark field $key") {
-            driver.node("bookmark-editor-$key")?.let { it.recycle(); return@await true }
-            val queue = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
-            instrumentation.uiAutomation.rootInActiveWindow?.let(queue::add)
-            var scrolled = false
-            while (queue.isNotEmpty()) {
-                val node = queue.removeFirst()
-                if (!scrolled && node.isVisibleToUser && node.isScrollable) scrolled = node.performAction(if (key == "text") android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD else android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-                for (index in 0 until node.childCount) node.getChild(index)?.let(queue::add)
-                node.recycle()
+    private fun ownedNode(scenario: ActivityScenario<AboutActivity>, id: String): android.view.accessibility.AccessibilityNodeInfo? {
+        val node = driver.node("bookmark-editor-$id") ?: return null
+        val outside = driver.node("bookmark-editor-outside")
+        val window = android.graphics.Rect()
+        scenario.onActivity { host ->
+            (host.supportFragmentManager.findFragmentByTag("bookmark-test") as? BookmarkDialog)
+                ?.dialog?.window?.decorView?.getGlobalVisibleRect(window)
+        }
+        val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+        val owned = outside != null && node.windowId == outside.windowId && android.graphics.Rect.intersects(window, bounds)
+        outside?.recycle()
+        if (owned) return node
+        node.recycle(); return null
+    }
+    private fun until(deadline: Long, description: String, condition: () -> Boolean) {
+        while (SystemClock.uptimeMillis() < deadline) {
+            if (condition()) return
+            SystemClock.sleep(25)
+        }
+        assertTrue(description, condition())
+    }
+    private fun frame(scenario: ActivityScenario<AboutActivity>, deadline: Long) {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val callback = Runnable { latch.countDown() }
+        var decor: android.view.View? = null
+        scenario.onActivity { host ->
+            decor = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).requireDialog().window!!.decorView
+            decor!!.viewTreeObserver.registerFrameCommitCallback(callback)
+            decor!!.postInvalidateOnAnimation()
+        }
+        try {
+            val remaining = deadline - SystemClock.uptimeMillis()
+            assertTrue("Owned bookmark window committed its natural frame", remaining > 0 && latch.await(remaining, java.util.concurrent.TimeUnit.MILLISECONDS))
+        } finally {
+            scenario.onActivity { decor?.viewTreeObserver?.unregisterFrameCommitCallback(callback) }
+        }
+    }
+    private fun actual(scenario: ActivityScenario<AboutActivity>, id: String, predicate: (android.view.accessibility.AccessibilityNodeInfo) -> Boolean): android.view.accessibility.AccessibilityNodeInfo? {
+        val nodes = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+        ownedNode(scenario, id)?.let(nodes::add) ?: return null
+        while (nodes.isNotEmpty()) {
+            val node = nodes.removeFirst()
+            if (node.isVisibleToUser && node.isEnabled && predicate(node)) { nodes.forEach { it.recycle() }; return node }
+            for (index in 0 until node.childCount) node.getChild(index)?.let(nodes::add)
+            node.recycle()
+        }
+        return null
+    }
+    private fun click(scenario: ActivityScenario<AboutActivity>, id: String, deadline: Long = SystemClock.uptimeMillis() + 30_000) {
+        var action: android.view.accessibility.AccessibilityNodeInfo? = null
+        until(deadline, "Owned $id advertises CLICK") {
+            action = actual(scenario, id) { it.isClickable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK } }
+            action != null
+        }
+        try { assertTrue(action!!.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)) }
+        finally { action?.recycle() }
+    }
+    private fun reveal(scenario: ActivityScenario<AboutActivity>, key: String, deadline: Long = SystemClock.uptimeMillis() + 30_000) {
+        until(deadline, "Visible owned bookmark field $key without changing IME") {
+            ownedNode(scenario, key)?.let { it.recycle(); return@until true }
+            val root = ownedNode(scenario, "outside") ?: return@until false
+            val windowId = root.windowId
+            var top = root
+            while (true) {
+                val parent = top.parent ?: break
+                if (parent.windowId != windowId) { parent.recycle(); break }
+                top.recycle(); top = parent
+            }
+            val nodes = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>(); nodes.add(top)
+            var scroll: android.view.accessibility.AccessibilityNodeInfo? = null
+            val direction = if (key == "text") android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD else android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+            while (nodes.isNotEmpty()) {
+                val node = nodes.removeFirst()
+                if (scroll == null && node.isVisibleToUser && node.isEnabled && node.isScrollable && node.actionList.any { it.id == direction }) {
+                    scroll = node
+                } else {
+                    for (index in 0 until node.childCount) node.getChild(index)?.let(nodes::add)
+                    node.recycle()
+                }
+            }
+            if (scroll != null) {
+                try { assertTrue(scroll.performAction(direction)) } finally { scroll.recycle() }
+                frame(scenario, deadline)
             }
             false
         }
     }
     private fun input(scenario: ActivityScenario<AboutActivity>, key: String, text: String) {
-        reveal(key); driver.setText("bookmark-editor-$key", text)
-        driver.await("native bookmark $key input ACK") {
+        val deadline = SystemClock.uptimeMillis() + 30_000
+        reveal(scenario, key, deadline)
+        val alreadyFocused = actual(scenario, key) { it.isEditable && it.isFocused }
+        if (alreadyFocused == null) click(scenario, key, deadline) else alreadyFocused.recycle()
+        fun connectionReady(): Boolean {
+            var ready = false
+            scenario.onActivity { host ->
+                val window = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).requireDialog().window!!
+                val focus = window.currentFocus
+                val manager = host.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                ready = focus != null && focus.isAttachedToWindow && focus.hasWindowFocus() && manager.isActive(focus) && manager.isAcceptingText
+            }
+            return ready
+        }
+        until(deadline, "Owned focused editable field and real native input connection") {
+            val field = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
+            val ready = field != null && connectionReady(); field?.recycle(); ready
+        }
+        frame(scenario, deadline)
+        // A platform frame can replace its AX node. Re-read after that boundary.
+        val field = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
+        assertNotNull("Fresh input target remains owned and ready", field)
+        assertTrue("Input connection remains active before the single text action", connectionReady())
+        try { assertTrue(field!!.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
+            putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        })) } finally { field?.recycle() }
+        until(deadline, "Native and actual bookmark $key input ACK") {
             var same = false
             scenario.onActivity { host -> val state = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).model.state.value
                 same = (if (key == "text") state.bookText else state.content) == text }
-            same
+            val node = actual(scenario, key) { it.isEditable }
+            val actual = node?.let { try { it.text?.toString() == text } finally { it.recycle() } } ?: false
+            same && actual
         }
-        androidx.test.espresso.Espresso.closeSoftKeyboard()
     }
 
     @Test
@@ -101,12 +198,16 @@ class BookmarkEditorRestoreTest {
             assertEquals(bookmark.bookText, initial.bookText)
             input(scenario, "text", "Draft text")
             input(scenario, "content", "Draft note")
-            val node = requireNotNull(driver.node("bookmark-editor-content"))
-            try { assertTrue(node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_SELECTION,
+            var node: android.view.accessibility.AccessibilityNodeInfo? = null
+            until(SystemClock.uptimeMillis() + 30_000, "Owned focused note advertises selection action") {
+                node = actual(scenario, "content") { it.isEditable && it.isFocused && it.actionList.any { action -> action.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_SELECTION } }
+                node != null
+            }
+            try { assertTrue(node!!.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_SELECTION,
                 android.os.Bundle().apply {
                     putInt(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 5)
                     putInt(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 2)
-                })) } finally { node.recycle() }
+                })) } finally { node?.recycle() }
             driver.await("native and actual reverse note selection") {
                 var native = false
                 scenario.onActivity { host -> val value = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).model.state.value
@@ -125,7 +226,7 @@ class BookmarkEditorRestoreTest {
                 driver.node("bookmark-editor-content")?.let { try { it.text?.toString() == "Draft note" && it.isFocused && it.textSelectionStart == 5 && it.textSelectionEnd == 2 } finally { it.recycle() } } ?: false
             }
             assertEquals("Chapter", driver.text("bookmark-editor-chapter"))
-            reveal("text"); assertEquals("Draft text", driver.text("bookmark-editor-text"))
+            reveal(scenario, "text"); assertEquals("Draft text", driver.text("bookmark-editor-text"))
             scenario.onActivity { activity ->
                 val dialog =
                     activity.supportFragmentManager.findFragmentByTag("bookmark-test")
@@ -138,7 +239,7 @@ class BookmarkEditorRestoreTest {
             assertEquals(bookmark, disk.seed.bookmark())
             assertEquals("Draft text", disk.bookText)
             assertEquals("Draft note", disk.content)
-            driver.click("bookmark-editor-cancel")
+            click(scenario, "cancel")
             await(scenario, true)
             runBlocking(Dispatchers.IO) {
                 assertTrue(
@@ -179,7 +280,7 @@ class BookmarkEditorRestoreTest {
             await(scenario)
             input(scenario, "text", "")
             input(scenario, "content", " Edited ")
-            driver.click("bookmark-editor-confirm")
+            click(scenario, "confirm")
             await(scenario, true)
             runBlocking(Dispatchers.IO) {
                 assertEquals(
@@ -210,7 +311,7 @@ class BookmarkEditorRestoreTest {
             scenario.onActivity { host -> val dialog = BookmarkDialog(owned, 0)
                 ids += dialog.requireArguments().getString("requestId")!!
                 dialog.showNow(host.supportFragmentManager, "bookmark-test") }
-            await(scenario); driver.click("bookmark-editor-delete"); await(scenario, true)
+            await(scenario); click(scenario, "delete"); await(scenario, true)
             runBlocking(Dispatchers.IO) {
                 assertTrue(appDb.bookmarkDao.getByBook(owned.bookName, owned.bookAuthor).isEmpty())
                 assertEquals(listOf(other), appDb.bookmarkDao.getByBook(other.bookName, other.bookAuthor))
@@ -225,18 +326,26 @@ class BookmarkEditorRestoreTest {
                 ids += dialog.requireArguments().getString("requestId")!!
                 dialog.showNow(host.supportFragmentManager, "bookmark-test") }
             await(scenario); input(scenario, "content", "Unsaved note")
-            scenario.onActivity { host ->
-                val window = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).requireDialog().window!!
-                androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).hide(androidx.core.view.WindowInsetsCompat.Type.ime())
+            fun dialogPresent(): Boolean {
+                var present = false
+                scenario.onActivity { present = it.supportFragmentManager.findFragmentByTag("bookmark-test") != null }
+                return present
             }
-            driver.await("owned bookmark IME hidden") {
-                var hidden = false
+            fun imeVisible(): Boolean? {
+                var visible: Boolean? = null
                 scenario.onActivity { host ->
-                    val decor = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).requireDialog().window!!.decorView
-                    hidden = androidx.core.view.ViewCompat.getRootWindowInsets(decor)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == false
-                }; hidden
+                    val decor = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as? BookmarkDialog)?.dialog?.window?.decorView
+                    if (decor != null) visible = androidx.core.view.ViewCompat.getRootWindowInsets(decor)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
+                }; return visible
             }
-            androidx.test.espresso.Espresso.pressBack(); await(scenario, true)
+            val deadline = SystemClock.uptimeMillis() + 30_000
+            until(deadline, "Owned IME state known before real Back") { !dialogPresent() || imeVisible() != null }
+            if (dialogPresent() && imeVisible() == true) {
+                instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                until(deadline, "Real Back hides owned IME or cancels bookmark Dialog") { !dialogPresent() || imeVisible() == false }
+            }
+            if (dialogPresent()) instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            await(scenario, true)
             scenario.onActivity { assertFalse(it.isFinishing) }
             runBlocking(Dispatchers.IO) { assertTrue(appDb.bookmarkDao.getByBook(bookmark.bookName, bookmark.bookAuthor).isEmpty()) }
         }
@@ -254,21 +363,9 @@ class BookmarkEditorRestoreTest {
                 val file = File(context.filesDir, "bookmark-editor/$ticket.json"); file.parentFile!!.mkdirs()
                 file.writeText(io.legado.app.utils.GSON.toJson(draft))
             }
-            // Invoke only the actual Retry button/descendant, never a backdrop ancestor.
-            driver.await("owned bookmark Retry CLICK") {
-                val queue = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
-                driver.node("bookmark-editor-retry")?.let(queue::add) ?: return@await false
-                var clicked = false
-                while (queue.isNotEmpty()) {
-                    val node = queue.removeFirst()
-                    if (!clicked && node.isVisibleToUser && node.isEnabled && node.isClickable && node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK })
-                        clicked = node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
-                    for (i in 0 until node.childCount) node.getChild(i)?.let(queue::add)
-                    node.recycle()
-                }; clicked
-            }
+            click(scenario, "retry")
             await(scenario); driver.await("actual original ticket chapter") { driver.text("bookmark-editor-chapter") == bookmark.chapterName }
-            driver.click("bookmark-editor-confirm"); await(scenario, true)
+            click(scenario, "confirm"); await(scenario, true)
             runBlocking(Dispatchers.IO) { assertEquals(listOf(bookmark), appDb.bookmarkDao.getByBook(bookmark.bookName, bookmark.bookAuthor)) }
             val finished = runBlocking { FileBookmarkEditorRepository(context).load(ticket) }; assertTrue(finished.finished)
             scenario.recreate()
@@ -292,7 +389,7 @@ class BookmarkEditorRestoreTest {
             val window = android.graphics.Rect()
             scenario.onActivity { host -> (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).requireDialog().window!!.decorView.getGlobalVisibleRect(window) }
             assertTrue(outside.intersect(window)); assertTrue(heading.top > outside.top + 8)
-            driver.touchDown(outside.exactCenterX(), (outside.top + heading.top) / 2f).close()
+            click(scenario, "outside")
             await(scenario, true)
             runBlocking(Dispatchers.IO) { assertTrue(appDb.bookmarkDao.getByBook(bookmark.bookName, bookmark.bookAuthor).isEmpty()) }
         }
