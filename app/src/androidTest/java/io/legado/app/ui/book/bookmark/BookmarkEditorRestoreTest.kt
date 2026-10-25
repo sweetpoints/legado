@@ -67,20 +67,61 @@ class BookmarkEditorRestoreTest {
         }
         assertTrue(description, condition())
     }
-    private fun frame(scenario: ActivityScenario<AboutActivity>, deadline: Long) {
-        val latch = java.util.concurrent.CountDownLatch(1)
-        val callback = Runnable { latch.countDown() }
-        var decor: android.view.View? = null
+    private data class WindowObservation(
+        val decorIdentity: Int,
+        val focusIdentity: Int?,
+        val bounds: android.graphics.Rect,
+        val width: Int,
+        val height: Int,
+        val attached: Boolean,
+        val windowFocused: Boolean,
+        val imeVisible: Boolean?,
+        val imeBottom: Int?,
+        val inputActive: Boolean,
+        val acceptingText: Boolean,
+    )
+    private fun observation(scenario: ActivityScenario<AboutActivity>): WindowObservation? {
+        var result: WindowObservation? = null
         scenario.onActivity { host ->
-            decor = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).requireDialog().window!!.decorView
-            decor!!.viewTreeObserver.registerFrameCommitCallback(callback)
-            decor!!.postInvalidateOnAnimation()
+            val window = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as? BookmarkDialog)?.dialog?.window
+                ?: return@onActivity
+            val decor = window.decorView
+            val bounds = android.graphics.Rect()
+            if (!decor.getGlobalVisibleRect(bounds)) return@onActivity
+            val insets = androidx.core.view.ViewCompat.getRootWindowInsets(decor)
+            val focus = window.currentFocus
+            val manager = host.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            result = WindowObservation(System.identityHashCode(decor), focus?.let(System::identityHashCode), bounds,
+                decor.width, decor.height, decor.isAttachedToWindow, decor.hasWindowFocus(),
+                insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()),
+                insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())?.bottom,
+                focus != null && manager.isActive(focus), manager.isAcceptingText)
         }
-        try {
-            val remaining = deadline - SystemClock.uptimeMillis()
-            assertTrue("Owned bookmark window committed its natural frame", remaining > 0 && latch.await(remaining, java.util.concurrent.TimeUnit.MILLISECONDS))
-        } finally {
-            scenario.onActivity { decor?.viewTreeObserver?.unregisterFrameCommitCallback(callback) }
+        return result
+    }
+    private fun frame(scenario: ActivityScenario<AboutActivity>, deadline: Long, requireInputConnection: Boolean = false) {
+        // Observe two Choreographer turns without invalidating, requesting layout or
+        // replacing a host draw callback. Works on the API26 minimum as well.
+        until(deadline, "Owned viewport, IME and input connection stable across two natural animation turns") {
+            val before = observation(scenario) ?: return@until false
+            if (!before.attached || !before.windowFocused || before.width <= 0 || before.height <= 0 ||
+                before.imeVisible == null || before.imeBottom == null) return@until false
+            if (requireInputConnection && (!before.inputActive || !before.acceptingText)) return@until false
+            val latch = java.util.concurrent.CountDownLatch(1)
+            var decor: android.view.View? = null
+            val second = Runnable { latch.countDown() }
+            val first = Runnable { decor?.postOnAnimation(second) }
+            scenario.onActivity { host ->
+                decor = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).requireDialog().window!!.decorView
+                decor!!.postOnAnimation(first)
+            }
+            val observed = try {
+                val remaining = deadline - SystemClock.uptimeMillis()
+                remaining > 0 && latch.await(remaining, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } finally {
+                scenario.onActivity { decor?.removeCallbacks(first); decor?.removeCallbacks(second) }
+            }
+            observed && observation(scenario) == before
         }
     }
     private fun actual(scenario: ActivityScenario<AboutActivity>, id: String, predicate: (android.view.accessibility.AccessibilityNodeInfo) -> Boolean): android.view.accessibility.AccessibilityNodeInfo? {
@@ -152,7 +193,7 @@ class BookmarkEditorRestoreTest {
             val field = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
             val ready = field != null && connectionReady(); field?.recycle(); ready
         }
-        frame(scenario, deadline)
+        frame(scenario, deadline, requireInputConnection = true)
         // A platform frame can replace its AX node. Re-read after that boundary.
         val field = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
         assertNotNull("Fresh input target remains owned and ready", field)
