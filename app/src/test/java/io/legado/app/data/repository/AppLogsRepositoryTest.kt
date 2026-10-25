@@ -118,6 +118,16 @@ class AppLogsRepositoryTest {
         }
     }
 
+    @Test
+    fun boundedPlainPreviewStillOpensTheCompleteNativeMessage() = runTest {
+        val text = "Synthetic😀\n".repeat(2000)
+        AppLog.putNotSave(text)
+        val repository = repository()
+        val row = repository.logs.first().single()
+        assertFalse(row.hasDetails)
+        assertEquals(text, repository.readDetail(row.id)?.text)
+    }
+
     private fun repository() = DefaultAppLogsRepository(folder.root)
 
     private fun setExportLength(length: Int): String {

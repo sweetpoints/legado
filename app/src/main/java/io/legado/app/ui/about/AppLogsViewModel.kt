@@ -44,6 +44,17 @@ class AppLogsViewModel(
             AppLogsUiState(showClearConfirmation = savedStateHandle[CONFIRM_CLEAR] ?: false)
         )
     val state = mutableState.asStateFlow()
+    internal var scrollIndex: Int
+        get() = savedStateHandle["diagnostics.scrollIndex"] ?: 0
+        private set(value) { savedStateHandle["diagnostics.scrollIndex"] = value }
+    internal var scrollOffset: Double
+        get() = savedStateHandle["diagnostics.scrollOffset"] ?: 0.0
+        private set(value) { savedStateHandle["diagnostics.scrollOffset"] = value }
+    internal fun rememberScroll(index: Int, offset: Double) {
+        require(index >= 0 && index <= 100_000 && offset.isFinite() && offset >= 0 && offset <= 10_000_000)
+        scrollIndex = index; scrollOffset = offset
+    }
+
     private var observation: Job? = null
 
     fun startObserving() {
@@ -93,7 +104,7 @@ class AppLogsViewModel(
     }
 
     fun openLog(id: Long) {
-        if (state.value.logs.none { it.id == id && it.hasDetails }) return
+        if (state.value.logs.none { it.id == id && (it.hasDetails || it.message.length > 512) }) return
         operate {
             val detail = repository.readDetail(id)
             coroutineContext.ensureActive()

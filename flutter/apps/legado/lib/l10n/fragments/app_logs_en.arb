@@ -1,0 +1,15 @@
+{
+  "appLogsTitle": "Logs",
+  "appLogsExport": "Export",
+  "appLogsEmpty": "No logs",
+  "appLogsShareFailed": "Unable to share logs",
+  "appLogsClearConfirm": "Clear all logs?",
+  "diagnosticsClose": "Close",
+  "diagnosticsClear": "Clear",
+  "diagnosticsCancel": "Cancel",
+  "diagnosticsRetry": "Retry",
+  "diagnosticsError": "Unable to load logs. Try again.",
+  "diagnosticsDetails": "Details",
+  "diagnosticsPrevious": "Previous",
+  "diagnosticsNext": "Next"
+}

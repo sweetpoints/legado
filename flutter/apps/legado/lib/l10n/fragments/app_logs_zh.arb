@@ -1,0 +1,15 @@
+{
+  "appLogsTitle": "日志",
+  "appLogsExport": "导出",
+  "appLogsEmpty": "暂无日志",
+  "appLogsShareFailed": "无法分享日志",
+  "appLogsClearConfirm": "清除全部日志？",
+  "diagnosticsClose": "关闭",
+  "diagnosticsClear": "清除",
+  "diagnosticsCancel": "取消",
+  "diagnosticsRetry": "重试",
+  "diagnosticsError": "无法加载日志，请重试。",
+  "diagnosticsDetails": "详情",
+  "diagnosticsPrevious": "上一页",
+  "diagnosticsNext": "下一页"
+}
