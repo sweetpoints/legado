@@ -1,5 +1,6 @@
 package io.legado.app.data.repository
 
+import androidx.annotation.Keep
 import android.content.Context
 import android.util.AtomicFile
 import io.legado.app.data.AppDatabase
@@ -14,6 +15,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+@Keep
 data class BookmarkEditorSeed(
     val time: Long,
     val bookName: String,
@@ -53,6 +55,7 @@ data class BookmarkEditorSeed(
     }
 }
 
+@Keep
 data class BookmarkEditorDraft(
     val seed: BookmarkEditorSeed,
     val bookText: String = seed.bookText,

@@ -1,0 +1,9 @@
+{
+  "bookmarkEditorTitle": "Bookmark",
+  "bookmarkEditorText": "Content",
+  "bookmarkEditorContent": "Note",
+  "bookmarkEditorDelete": "Delete",
+  "bookmarkEditorCancel": "Cancel",
+  "bookmarkEditorConfirm": "OK",
+  "bookmarkEditorBridgeError": "Bookmark editor is unavailable. Retry."
+}
