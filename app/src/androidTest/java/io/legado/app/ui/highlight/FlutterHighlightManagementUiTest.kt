@@ -124,14 +124,104 @@ class FlutterHighlightManagementUiTest {
                 ui.await15("normal manager ready") { ui.exists("highlight-management-menu") }
                 ui.click("highlight-management-menu"); ui.click("highlight-management-groups")
                 ui.await15("normal group Flutter label") { ui.exists("highlight-group-label-Flutter A") }
-                ui.click("highlight-group-edit-Flutter A"); driver.setText("highlight-group-name", "  Private😀\nDraft  ")
+                fun inputGroupName(value: String) {
+                    val deadline = android.os.SystemClock.uptimeMillis() + 30_000
+                    var receipt = "not sampled"
+                    lateinit var owner: HighlightGroupManageDialog
+                    scenario.onActivity { owner = it.supportFragmentManager.fragments.filterIsInstance<HighlightGroupManageDialog>().single() }
+                    fun awaitInput(description: String, condition: () -> Boolean) {
+                        while (android.os.SystemClock.uptimeMillis() < deadline) {
+                            if (condition()) return
+                            android.os.SystemClock.sleep(25)
+                        }
+                        assertTrue("$description; $receipt", condition())
+                    }
+                    fun field(focused: Boolean): android.view.accessibility.AccessibilityNodeInfo? {
+                        val nodes = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+                        driver.node("highlight-group-name")?.let(nodes::add) ?: return null
+                        var windowId = -1
+                        scenario.onActivity {
+                            owner.dialog?.window?.decorView?.createAccessibilityNodeInfo()?.let { node ->
+                                try { windowId = node.windowId } finally { node.recycle() }
+                            }
+                        }
+                        while (nodes.isNotEmpty()) {
+                            val node = nodes.removeFirst()
+                            receipt = "sameWindow=${node.windowId == windowId},visible=${node.isVisibleToUser}," +
+                                "enabled=${node.isEnabled},editable=${node.isEditable},focused=${node.isFocused}," +
+                                "setText=${node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT }}"
+                            if (node.windowId == windowId && node.isVisibleToUser && node.isEnabled && node.isEditable &&
+                                (!focused || node.isFocused) && node.actionList.any {
+                                    it.id == if (focused) android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT
+                                    else android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK
+                                }) {
+                                nodes.forEach { it.recycle() }; return node
+                            }
+                            for (index in 0 until node.childCount) node.getChild(index)?.let(nodes::add)
+                            node.recycle()
+                        }
+                        return null
+                    }
+                    // The identifier may belong to the Semantics wrapper rather than its
+                    // editable descendant. Preserve the page's autofocus; click at most once.
+                    var target: android.view.accessibility.AccessibilityNodeInfo? = null
+                    awaitInput("Owned actual group field") {
+                        target = field(true) ?: field(false); target != null
+                    }
+                    target!!.let { node -> try {
+                        if (!node.isFocused) assertTrue(node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+                    } finally { node.recycle() } }
+                    fun viewport(): List<Int>? {
+                        var result: List<Int>? = null
+                        scenario.onActivity { host ->
+                            if (host.supportFragmentManager.fragments.filterIsInstance<HighlightGroupManageDialog>().singleOrNull() !== owner) return@onActivity
+                            val window = owner.dialog?.window ?: return@onActivity
+                            val decor = window.decorView
+                            val focus = window.currentFocus ?: return@onActivity
+                            val manager = host.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                            val insets = androidx.core.view.ViewCompat.getRootWindowInsets(decor) ?: return@onActivity
+                            if (owner.isResumed && decor.isAttachedToWindow && decor.isLaidOut && !decor.isLayoutRequested &&
+                                decor.hasWindowFocus() && manager.isActive(focus) && manager.isAcceptingText) {
+                                result = listOf(System.identityHashCode(decor), System.identityHashCode(focus), decor.width, decor.height,
+                                    insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom,
+                                    if (insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())) 1 else 0)
+                            }
+                        }
+                        return result
+                    }
+                    awaitInput("Owned input connection and viewport across natural animation turns") {
+                        val before = viewport() ?: return@awaitInput false
+                        val latch = java.util.concurrent.CountDownLatch(1)
+                        var decor: android.view.View? = null
+                        val second = Runnable { latch.countDown() }
+                        val first = Runnable { decor?.postOnAnimation(second) }
+                        scenario.onActivity { decor = owner.dialog?.window?.decorView; decor?.postOnAnimation(first) }
+                        val observed = try {
+                            val remaining = deadline - android.os.SystemClock.uptimeMillis()
+                            remaining > 0 && latch.await(remaining, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        } finally { scenario.onActivity { decor?.removeCallbacks(first); decor?.removeCallbacks(second) } }
+                        observed && viewport() == before && field(true)?.let { it.recycle(); true } == true
+                    }
+                    val fresh = field(true)
+                    assertNotNull("Fresh owned editable descendant before single SET_TEXT; $receipt", fresh)
+                    try { assertTrue(fresh!!.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
+                        putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
+                    })) } finally { fresh?.recycle() }
+                    awaitInput("Native and actual raw group field ACK") {
+                        var native = false
+                        scenario.onActivity { native = owner.model.state.value.name == value }
+                        val actual = field(true)?.let { node -> try { node.text?.toString() == value } finally { node.recycle() } } ?: false
+                        native && actual
+                    }
+                }
+                ui.click("highlight-group-edit-Flutter A"); inputGroupName("  Private😀\nDraft  ")
                 ui.await15("raw group native ACK") {
                     var raw = false; scenario.onActivity { host -> raw = host.supportFragmentManager.fragments.filterIsInstance<HighlightGroupManageDialog>().single().model.state.value.name == "  Private😀\nDraft  " }; raw
                 }
                 scenario.recreate(); ui.await15("actual recreated private raw draft") { ui.text("highlight-group-name") == "  Private😀\nDraft  " }
                 ui.click("highlight-group-cancel"); ui.await15("rename canceled") { !ui.exists("highlight-group-name") }
                 assertEquals(GSON.toJson(first), GSON.toJson(database { dao.all.single { it.uuid == first.uuid } }))
-                ui.click("highlight-group-edit-Flutter A"); driver.setText("highlight-group-name", "  Renamed  "); ui.click("highlight-group-rename-confirm")
+                ui.click("highlight-group-edit-Flutter A"); inputGroupName("  Renamed  "); ui.click("highlight-group-rename-confirm")
                 ui.await15("rename commits before actual group receipt") { database { dao.all.single { it.uuid == first.uuid }.group == "Renamed" } && ui.exists("highlight-group-label-Renamed") }
                 assertEquals(GSON.toJson(first.copy(group = "Renamed")), GSON.toJson(database { dao.all.single { it.uuid == first.uuid } }))
                 assertEquals(GSON.toJson(hidden), GSON.toJson(database { dao.all.single { it.uuid == hidden.uuid } }))
