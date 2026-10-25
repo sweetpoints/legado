@@ -213,6 +213,8 @@ class AllBookmarksViewModelTest {
         val model = model(repo, saved)
         runCurrent()
         model.scroll(7, 31)
+        assertEquals(7, model.state.value.scroll)
+        assertEquals(31, model.state.value.offset)
         model.requestExport(false)
         model.delivered(model.state.value.effect!!.nonce)
         repo.gate = CompletableDeferred()
@@ -226,5 +228,22 @@ class AllBookmarksViewModelTest {
         runCurrent()
         assertEquals(7, restored.state.value.scroll)
         assertEquals(31, restored.state.value.offset)
+    }
+
+    @Test
+    fun staleDirectoryNonceCannotConsumeCurrentPickerOrWriteExport() = test {
+        val repo = Fake()
+        val model = model(repo)
+        runCurrent()
+        model.requestExport(true)
+        val ticket = model.state.value.effect!!.nonce
+        model.delivered(ticket)
+        model.directoryResult("unexpected", "wrong nonce")
+        runCurrent()
+        assertEquals(ticket, model.waitingDirectory())
+        assertTrue(repo.exports.isEmpty())
+        model.directoryResult(null, ticket)
+        assertNull(model.waitingDirectory())
+        assertTrue(repo.exports.isEmpty())
     }
 }

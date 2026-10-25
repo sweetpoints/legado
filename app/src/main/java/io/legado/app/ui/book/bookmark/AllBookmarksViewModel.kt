@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.bookmark
 
+import androidx.annotation.Keep
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,12 +12,14 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+@Keep
 enum class AllBookmarksEffectType {
     Open,
     Directory,
     Exported,
 }
 
+@Keep
 data class AllBookmarksEffect(
     val nonce: String = UUID.randomUUID().toString(),
     val type: AllBookmarksEffectType,
@@ -113,8 +116,10 @@ class AllBookmarksViewModel(
         return value
     }
 
-    fun directoryResult(directory: String?) {
-        if (saved.get<String>("allBookmarks.directory") == null) return
+    fun waitingDirectory(): String? = saved["allBookmarks.directory"]
+
+    fun directoryResult(directory: String?, ticket: String? = waitingDirectory()) {
+        if (ticket == null || ticket != waitingDirectory()) return
         saved.remove<String>("allBookmarks.directory")
         val markdown = saved.get<Boolean>("allBookmarks.markdown") == true
         saved.remove<Boolean>("allBookmarks.markdown")
@@ -150,8 +155,14 @@ class AllBookmarksViewModel(
     }
 
     fun scroll(index: Int, offset: Int) {
-        saved["allBookmarks.scroll"] = index.coerceAtLeast(0)
-        saved["allBookmarks.offset"] = offset.coerceAtLeast(0)
+        val nextIndex = index.coerceAtLeast(0)
+        val nextOffset = offset.coerceAtLeast(0)
+        saved["allBookmarks.scroll"] = nextIndex
+        saved["allBookmarks.offset"] = nextOffset
+        // A recreated Flutter engine binds the retained ViewModel, not a newly
+        // constructed one. Publish the checkpoint as well as persisting primitives.
+        if (state.value.scroll != nextIndex || state.value.offset != nextOffset)
+            mutable.value = state.value.copy(scroll = nextIndex, offset = nextOffset)
     }
 
     fun stop() {
