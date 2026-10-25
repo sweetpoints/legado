@@ -277,6 +277,91 @@ class BookmarkEditorRestoreTest {
             false
         }
     }
+    // Only nativeBackDiscardsEditedDraftWithoutSavingAndKeepsParentAlive uses this
+    // pre-click fitted-viewport gate. The six successful cases keep their input path.
+    private fun inputBackDraft(scenario: ActivityScenario<AboutActivity>, text: String) {
+        val key = "content"
+        val probe = InputProbe(scenario, key, text)
+        try {
+        val deadline = SystemClock.uptimeMillis() + 30_000
+        var focusedOrClicked = false
+        while (!focusedOrClicked && SystemClock.uptimeMillis() < deadline) {
+            probe.sample("beforeFirstFocus")
+            // The IME may fit the native window after reveal first sees the note.
+            // Re-observe this failed case's target before its first/only focus action.
+            reveal(scenario, key, deadline)
+            frame(scenario, deadline)
+            val candidate = actual(scenario, key) { node ->
+                node.isEditable && (node.isFocused ||
+                    (node.isClickable && node.actionList.any { it.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK }))
+            }
+            if (candidate == null) continue
+            try {
+                if (candidate.isFocused) {
+                    lastChosenClick = "not dispatched(alreadyFocused=true);${nodeScalar(candidate)}"
+                } else {
+                    lastChosenClick = nodeScalar(candidate)
+                    diagnosticLog("phase=chosenCLICK,key=$key;$lastChosenClick")
+                    assertTrue(candidate.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+                }
+                focusedOrClicked = true
+            } finally { candidate.recycle() }
+        }
+        assertTrue("Owned content advertises CLICK or already has actual focus", focusedOrClicked)
+        fun connectionReady(): Boolean {
+            var ready = false
+            scenario.onActivity { host ->
+                val window = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).requireDialog().window!!
+                val focus = window.currentFocus
+                val manager = host.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                ready = focus != null && focus.isAttachedToWindow && focus.hasWindowFocus() && manager.isActive(focus) && manager.isAcceptingText
+            }
+            return ready
+        }
+        var field: android.view.accessibility.AccessibilityNodeInfo? = null
+        while (field == null && SystemClock.uptimeMillis() < deadline) {
+            until(deadline, "Owned focused editable field and real native input connection") {
+                probe.sample("readiness")
+                val candidate = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
+                if (candidate == null) {
+                    // A focus acquired in the old viewport can move offscreen when the
+                    // actual IME fits the native window. Reveal it using real scrolling;
+                    // do not repeat the already dispatched focus click or text action.
+                    val visible = ownedNode(scenario, key)
+                    if (visible == null && SystemClock.uptimeMillis() < deadline) reveal(scenario, key, deadline)
+                    visible?.recycle()
+                    false
+                } else {
+                    val ready = connectionReady(); candidate.recycle(); ready
+                }
+            }
+            frame(scenario, deadline, requireInputConnection = true)
+            probe.sample("afterNaturalTurns", force = true)
+            // The natural platform boundary may replace or hide the AX node. Return
+            // to the same deadline/visibility observation rather than reusing it.
+            val fresh = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
+            if (fresh != null && connectionReady()) field = fresh else fresh?.recycle()
+        }
+        assertNotNull("Fresh input target remains owned and ready", field)
+        assertTrue("Input connection remains active before the single text action", connectionReady())
+        try { assertTrue(field!!.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
+            putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        })) } finally { field?.recycle() }
+        until(deadline, "Native and actual bookmark $key input ACK") {
+            probe.sample("afterSingleSET_TEXT")
+            var same = false
+            scenario.onActivity { host -> val state = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).model.state.value
+                same = (if (key == "text") state.bookText else state.content) == text }
+            val node = actual(scenario, key) { it.isEditable }
+            val actual = node?.let { try { it.text?.toString().orEmpty() == text } finally { it.recycle() } } ?: false
+            same && actual
+        }
+        } catch (failure: AssertionError) {
+            probe.fail(failure)
+            throw failure
+        }
+    }
+
     private fun input(scenario: ActivityScenario<AboutActivity>, key: String, text: String) {
         val probe = InputProbe(scenario, key, text)
         try {
@@ -525,7 +610,7 @@ class BookmarkEditorRestoreTest {
             scenario.onActivity { host -> val dialog = BookmarkDialog(bookmark)
                 ids += dialog.requireArguments().getString("requestId")!!
                 dialog.showNow(host.supportFragmentManager, "bookmark-test") }
-            await(scenario); input(scenario, "content", "Unsaved note")
+            await(scenario); inputBackDraft(scenario, "Unsaved note")
             fun dialogPresent(): Boolean {
                 var present = false
                 scenario.onActivity { present = it.supportFragmentManager.findFragmentByTag("bookmark-test") != null }
