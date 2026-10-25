@@ -217,6 +217,48 @@ class AllBookmarksHostTest {
             val readyDeadline = android.os.SystemClock.uptimeMillis() + 20_000
             var readiness = "not observed"
             var readyPhase = "native-dialog-ready"
+            var observedHost = java.lang.ref.WeakReference<io.legado.app.ui.file.HandleFileActivity>(null)
+            var observedWindow = java.lang.ref.WeakReference<android.view.Window>(null)
+            var observedCaller = java.lang.ref.WeakReference<AllBookmarkActivity>(null)
+            scenario.onActivity { observedCaller = java.lang.ref.WeakReference(it) }
+            fun afterBackSnapshot(): String {
+                var native = "nativeHostCollected=true"
+                instrumentation.runOnMainSync {
+                    val host = observedHost.get()
+                    val window = observedWindow.get()
+                    val state = host?.choicesModel?.state?.value
+                    val decor = window?.decorView
+                    val insets = decor?.let(androidx.core.view.ViewCompat::getRootWindowInsets)
+                    val phase = state?.phase?.takeIf { it in setOf("Choices", "Manual", "Native", "Saving", "Uploading", "Result") } ?: "unknown"
+                    native = "nativeObservedUptime=${android.os.SystemClock.uptimeMillis()} nativeHostPresent=${host != null} nativeLifecycle=${host?.lifecycle?.currentState} " +
+                        "nativeFinishing=${host?.isFinishing} nativeDestroyed=${host?.isDestroyed} nativeStateSaved=${host?.supportFragmentManager?.isStateSaved} " +
+                        "nativeLoaded=${state?.loaded} nativeFinished=${state?.finished} nativeBusy=${state?.busy} nativePhase=$phase " +
+                        "nativeRequiresRetry=${state?.requiresRetry} nativeError=${state?.error != null} nativeIssue=${state?.issue != null} " +
+                        "nativeResultPresent=${state?.result != null} nativePending=${state?.pending != null} " +
+                        "dialogWindowPresent=${window != null} dialogAttached=${decor?.isAttachedToWindow} dialogShown=${decor?.isShown} " +
+                        "dialogFocused=${decor?.hasWindowFocus()} nativeActivityFocused=${host?.window?.decorView?.hasWindowFocus()} " +
+                        "dialogImeVisible=${insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())} " +
+                        "dialogImeBottom=${insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())?.bottom}"
+                }
+                var caller = "callerCollected=true"
+                instrumentation.runOnMainSync {
+                    val host = observedCaller.get()
+                    val pickerValue = observedHost.get()?.intent?.getStringExtra("value")
+                    val outstanding = host?.model?.waitingDirectory()
+                    caller = "callerObservedUptime=${android.os.SystemClock.uptimeMillis()} callerPresent=${host != null} callerLifecycle=${host?.lifecycle?.currentState} " +
+                        "callerFinishing=${host?.isFinishing} callerDestroyed=${host?.isDestroyed} " +
+                        "callerWindowFocused=${host?.window?.decorView?.hasWindowFocus()} callerStateSaved=${host?.supportFragmentManager?.isStateSaved} " +
+                        "exporting=${host?.model?.state?.value?.exporting} effect=${host?.model?.state?.value?.effect != null} " +
+                        "directoryTicketPresent=${outstanding != null} nativeCallerValuePresent=${pickerValue != null} " +
+                        "outstandingMatchesNativeValue=${outstanding != null && outstanding == pickerValue}"
+                }
+                val active = instrumentation.uiAutomation.rootInActiveWindow
+                val root = try {
+                    "activeRootPresent=${active != null} activePackageMatches=${active?.packageName == context.packageName} " +
+                        "activeClass=${active?.className} activeWindow=${active?.windowId}"
+                } finally { active?.recycle() }
+                return "$native $caller $root"
+            }
             fun readyDialog(): android.view.View? {
                 val nodes = compose.onAllNodesWithTag("handle-file-dialog").fetchSemanticsNodes()
                 val node = nodes.singleOrNull() ?: run { readiness = "dialogNodes=${nodes.size}"; return null }
@@ -254,7 +296,11 @@ class AllBookmarksHostTest {
                         "error=${state?.error != null} issue=${state?.issue != null} ownerReady=$ownerReady cancelEnabled=$cancel " +
                         "dialogWindow=${decor != null} attached=${decor?.isAttachedToWindow} laidOut=${decor?.isLaidOut} " +
                         "shown=${decor?.isShown} dialogFocused=${decor?.hasWindowFocus()} activityFocused=${picker?.window?.decorView?.hasWindowFocus()}"
-                    if (ready) result = decor
+                    if (ready) {
+                        result = decor
+                        observedHost = java.lang.ref.WeakReference<io.legado.app.ui.file.HandleFileActivity>(picker)
+                        observedWindow = java.lang.ref.WeakReference<android.view.Window>(window)
+                    }
                 }
                 return result
             }
@@ -283,6 +329,9 @@ class AllBookmarksHostTest {
                 assertEquals(1, launches.get())
                 // One real Back only after the actual floating dialog is interactive.
                 instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                // Diagnostic only: one immediate sample, plus the failure sample below.
+                // No polling, extra Back, state mutation or change to the original waits.
+                runCatching { android.util.Log.i("AllBookmarksPicker", "afterSingleBack ${afterBackSnapshot()}") }
                 readyPhase = "parent-after-single-back"
                 actual.ready()
                 actual.driver.await("Native directory cancel consumes ticket without starting export") {
@@ -299,15 +348,7 @@ class AllBookmarksHostTest {
                 assertEquals(original, runBlocking(Dispatchers.IO) { appDb.bookmarkDao.all.single { it.time == original.time } })
             } catch (failure: Throwable) {
                 runCatching {
-                    var caller = "callerMissing=true"
-                    scenario.onActivity {
-                        caller = "callerResumed=${it.lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED} " +
-                            "exporting=${it.model.state.value.exporting} effect=${it.model.state.value.effect != null} directoryTicket=${it.model.waitingDirectory() != null}"
-                    }
-                    val active = instrumentation.uiAutomation.rootInActiveWindow
-                    val window = try { "activeWindow=${active?.windowId} activePackageMatches=${active?.packageName == context.packageName}" }
-                        finally { active?.recycle() }
-                    android.util.Log.e("AllBookmarksPicker", "phase=$readyPhase lastReady=[$readiness] $caller $window")
+                    android.util.Log.e("AllBookmarksPicker", "phase=$readyPhase lastReady=[$readiness] ${afterBackSnapshot()}")
                 }.onFailure { failure.addSuppressed(it) }
                 throw failure
             }
