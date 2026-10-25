@@ -46,6 +46,92 @@ class BookmarkEditorRestoreTest {
         throw AssertionError("Bookmark editor did not restore/close")
     }
 
+    private var diagnosticLogs = 0
+    private var lastChosenClick = "not dispatched"
+    private fun nodeScalar(node: android.view.accessibility.AccessibilityNodeInfo?): String {
+        if (node == null) return "missing"
+        val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+        return "class=${node.className},id=${node.viewIdResourceName},window=${node.windowId}," +
+            "visible=${node.isVisibleToUser},enabled=${node.isEnabled},editable=${node.isEditable}," +
+            "focused=${node.isFocused},axFocused=${node.isAccessibilityFocused}," +
+            "actions=${node.actionList.take(12).map { it.id }},bounds=$bounds," +
+            "textPresent=${node.text != null},textLength=${node.text?.length ?: 0}," +
+            "descriptionPresent=${node.contentDescription != null},descriptionLength=${node.contentDescription?.length ?: 0}"
+    }
+    private fun diagnosticLog(value: String) {
+        if (diagnosticLogs < 8) {
+            diagnosticLogs++
+            android.util.Log.i("BookmarkEditorProbe", value.take(3800))
+        }
+    }
+    /** Read-only bounded observations. No strings from book text/note/chapter are emitted. */
+    private inner class InputProbe(private val scenario: ActivityScenario<AboutActivity>, private val key: String, private val expected: String) {
+        private var samples = 0
+        private var nextSample = 0L
+        var last = "not sampled"
+            private set
+        fun sample(phase: String, force: Boolean = false) {
+            try { capture(phase, force) }
+            catch (error: Exception) {
+                last = "phase=$phase,diagnosticErrorClass=${error.javaClass.simpleName}"
+                diagnosticLog(last)
+            }
+        }
+        private fun capture(phase: String, force: Boolean) {
+            val now = SystemClock.uptimeMillis()
+            if (!force && (samples >= 4 || now < nextSample)) return
+            if (!force) { samples++; nextSample = now + 5_000 }
+            val parts = mutableListOf("phase=$phase,key=$key,expectedLength=${expected.length},chosenCLICK=$lastChosenClick")
+            scenario.onActivity { host ->
+                val editor = host.supportFragmentManager.findFragmentByTag("bookmark-test") as? BookmarkDialog
+                val state = editor?.model?.state?.value
+                if (state == null) parts += "native=missing" else {
+                    val value = when (key) { "text" -> state.bookText; "content" -> state.content; else -> state.chapter }
+                    parts += "nativeFocus=${state.focused},nativeLength=${value.length},nativeEquals=${value == expected},loaded=${state.loaded},loading=${state.loading},busy=${state.busy},finished=${state.finished},errorPresent=${state.error != null}"
+                }
+                val decor = editor?.dialog?.window?.decorView
+                val focus = editor?.dialog?.window?.currentFocus
+                val activityManager = host.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                val windowManager = decor?.context?.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                val insets = decor?.let { androidx.core.view.ViewCompat.getRootWindowInsets(it) }
+                val bounds = android.graphics.Rect(); decor?.getGlobalVisibleRect(bounds)
+                parts += "decorClass=${decor?.javaClass?.simpleName},decorIdentity=${decor?.let(System::identityHashCode)},decorSize=${decor?.width}x${decor?.height},decorBounds=$bounds,attached=${decor?.isAttachedToWindow},windowFocus=${decor?.hasWindowFocus()},imeKnown=${insets != null},imeVisible=${insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())},imeBottom=${insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())?.bottom}"
+                parts += "currentFocusClass=${focus?.javaClass?.name},focusIdentity=${focus?.let(System::identityHashCode)},focusAttached=${focus?.isAttachedToWindow},focusWindow=${focus?.hasWindowFocus()},activityIMM=${System.identityHashCode(activityManager)},windowIMM=${windowManager?.let(System::identityHashCode)},activityActiveCurrent=${focus?.let { activityManager.isActive(it) }},windowActiveCurrent=${focus?.let { windowManager?.isActive(it) }},acceptingText=${activityManager.isAcceptingText},windowAcceptingText=${windowManager?.isAcceptingText}"
+                val views = java.util.ArrayDeque<android.view.View>()
+                decor?.let(views::add); var visited = 0; var flutterViews = 0
+                while (views.isNotEmpty() && visited++ < 48 && flutterViews < 2) {
+                    val view = views.removeFirst()
+                    if (view is io.flutter.embedding.android.FlutterView) {
+                        flutterViews++
+                        val metrics = view.viewportMetrics
+                        parts += "FlutterViewClass=${view.javaClass.name},identity=${System.identityHashCode(view)},isCurrent=${view === focus},attached=${view.isAttachedToWindow},windowFocus=${view.hasWindowFocus()},hasFocus=${view.hasFocus()},isFocused=${view.isFocused},activityActive=${activityManager.isActive(view)},windowActive=${windowManager?.isActive(view)},engineAttached=${view.isAttachedToFlutterEngine},displaying=${view.attachedFlutterEngine?.renderer?.isDisplayingFlutterUi},viewport=${metrics.width}x${metrics.height},engineImeBottom=${metrics.viewInsetBottom}"
+                    }
+                    if (view is android.view.ViewGroup) for (index in 0 until minOf(view.childCount, 24)) views.add(view.getChildAt(index))
+                }
+            }
+            val activeRoot = instrumentation.uiAutomation.rootInActiveWindow
+            parts += "AXRootPackage=${activeRoot?.packageName},AXRootWindowId=${activeRoot?.windowId},AXRootClass=${activeRoot?.className}"
+            activeRoot?.recycle()
+            val validatedOutside = ownedNode(scenario, "outside")
+            parts += "ownedOutsideFound=${validatedOutside != null}"
+            validatedOutside?.recycle()
+            val outside = driver.node("bookmark-editor-outside")
+            parts += "ownerOutside=${nodeScalar(outside)}"
+            outside?.recycle()
+            val marker = driver.node("bookmark-editor-$key")
+            parts += "marker=${nodeScalar(marker)},textEquals=${marker?.text?.toString() == expected},descriptionEquals=${marker?.contentDescription?.toString() == expected}"
+            marker?.recycle()
+            val field = actual(scenario, key) { it.isEditable }
+            parts += "editableDescendant=${nodeScalar(field)},actualEquals=${field?.text?.toString() == expected}"
+            field?.recycle()
+            last = parts.joinToString(";")
+            diagnosticLog(last)
+        }
+        fun fail(failure: AssertionError) {
+            sample("failure", force = true)
+            failure.addSuppressed(AssertionError("Bookmark bounded scalar: $last"))
+        }
+    }
     private fun ownedNode(scenario: ActivityScenario<AboutActivity>, id: String): android.view.accessibility.AccessibilityNodeInfo? {
         val node = driver.node("bookmark-editor-$id") ?: return null
         val outside = driver.node("bookmark-editor-outside")
@@ -144,6 +230,17 @@ class BookmarkEditorRestoreTest {
         try { assertTrue(action!!.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)) }
         finally { action?.recycle() }
     }
+    private fun diagnosticClick(scenario: ActivityScenario<AboutActivity>, id: String, deadline: Long = SystemClock.uptimeMillis() + 30_000) {
+        var action: android.view.accessibility.AccessibilityNodeInfo? = null
+        until(deadline, "Owned $id advertises CLICK") {
+            action = actual(scenario, id) { it.isClickable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK } }
+            action != null
+        }
+        lastChosenClick = nodeScalar(action)
+        diagnosticLog("phase=chosenCLICK,key=$id;$lastChosenClick")
+        try { assertTrue(action!!.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)) }
+        finally { action?.recycle() }
+    }
     private fun reveal(scenario: ActivityScenario<AboutActivity>, key: String, deadline: Long = SystemClock.uptimeMillis() + 30_000) {
         until(deadline, "Visible owned bookmark field $key without changing IME") {
             ownedNode(scenario, key)?.let { it.recycle(); return@until true }
@@ -175,10 +272,15 @@ class BookmarkEditorRestoreTest {
         }
     }
     private fun input(scenario: ActivityScenario<AboutActivity>, key: String, text: String) {
+        val probe = InputProbe(scenario, key, text)
+        try {
         val deadline = SystemClock.uptimeMillis() + 30_000
         reveal(scenario, key, deadline)
         val alreadyFocused = actual(scenario, key) { it.isEditable && it.isFocused }
-        if (alreadyFocused == null) click(scenario, key, deadline) else alreadyFocused.recycle()
+        if (alreadyFocused == null) diagnosticClick(scenario, key, deadline) else {
+            lastChosenClick = "not dispatched(alreadyFocused=true);${nodeScalar(alreadyFocused)}"
+            alreadyFocused.recycle()
+        }
         fun connectionReady(): Boolean {
             var ready = false
             scenario.onActivity { host ->
@@ -190,10 +292,12 @@ class BookmarkEditorRestoreTest {
             return ready
         }
         until(deadline, "Owned focused editable field and real native input connection") {
+            probe.sample("readiness")
             val field = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
             val ready = field != null && connectionReady(); field?.recycle(); ready
         }
         frame(scenario, deadline, requireInputConnection = true)
+        probe.sample("afterNaturalTurns", force = true)
         // A platform frame can replace its AX node. Re-read after that boundary.
         val field = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
         assertNotNull("Fresh input target remains owned and ready", field)
@@ -202,12 +306,17 @@ class BookmarkEditorRestoreTest {
             putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         })) } finally { field?.recycle() }
         until(deadline, "Native and actual bookmark $key input ACK") {
+            probe.sample("afterSingleSET_TEXT")
             var same = false
             scenario.onActivity { host -> val state = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).model.state.value
                 same = (if (key == "text") state.bookText else state.content) == text }
             val node = actual(scenario, key) { it.isEditable }
             val actual = node?.let { try { it.text?.toString() == text } finally { it.recycle() } } ?: false
             same && actual
+        }
+        } catch (failure: AssertionError) {
+            probe.fail(failure)
+            throw failure
         }
     }
 
@@ -404,8 +513,15 @@ class BookmarkEditorRestoreTest {
                 val file = File(context.filesDir, "bookmark-editor/$ticket.json"); file.parentFile!!.mkdirs()
                 file.writeText(io.legado.app.utils.GSON.toJson(draft))
             }
-            click(scenario, "retry")
-            await(scenario); driver.await("actual original ticket chapter") { driver.text("bookmark-editor-chapter") == bookmark.chapterName }
+            diagnosticClick(scenario, "retry")
+            await(scenario)
+            val probe = InputProbe(scenario, "chapter", bookmark.chapterName)
+            try {
+                driver.await("actual original ticket chapter") {
+                    probe.sample("chapterReceipt")
+                    driver.text("bookmark-editor-chapter") == bookmark.chapterName
+                }
+            } catch (failure: AssertionError) { probe.fail(failure); throw failure }
             click(scenario, "confirm"); await(scenario, true)
             runBlocking(Dispatchers.IO) { assertEquals(listOf(bookmark), appDb.bookmarkDao.getByBook(bookmark.bookName, bookmark.bookAuthor)) }
             val finished = runBlocking { FileBookmarkEditorRepository(context).load(ticket) }; assertTrue(finished.finished)
