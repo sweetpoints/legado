@@ -9,7 +9,9 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
-import androidx.test.espresso.action.ViewActions.swipeUp
+import androidx.test.espresso.action.GeneralSwipeAction
+import androidx.test.espresso.action.Press
+import androidx.test.espresso.action.Swipe
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -190,7 +192,17 @@ class ReadingLayoutTransitionTest {
                     // Recreating a scroll reader must not recursively inflate the Activity binding.
                     scenario.recreate()
                     awaitStableReader(scenario, book.bookUrl, true)
-                    onView(withId(R.id.read_view)).perform(swipeUp())
+                    // Full ReadView reaches the system Home edge in the CI viewport. Keep the
+                    // single real gesture inside the current page's actual visible text bounds.
+                    fun scrollCoordinates(fraction: Float): (android.view.View) -> FloatArray = { target ->
+                        val content = (target as ReadView).curPage.findViewById<ContentTextView>(R.id.content_text_view)
+                        val visible = android.graphics.Rect()
+                        check(content.getGlobalVisibleRect(visible) && !visible.isEmpty)
+                        floatArrayOf(visible.exactCenterX(), visible.top + visible.height() * fraction)
+                    }
+                    onView(withId(R.id.read_view)).perform(
+                        GeneralSwipeAction(Swipe.FAST, scrollCoordinates(0.8f), scrollCoordinates(0.2f), Press.FINGER),
+                    )
                     compose.waitForIdle()
                     await {
                         var stopped = false
