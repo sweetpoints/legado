@@ -50,7 +50,7 @@ final class EmbeddedSourceConfigurationProvider
 }
 
 String _$embeddedSourceConfigurationHash() =>
-    r'00fdd401a70288d06535a165b1bae39b3ed22f0b';
+    r'8418f15ed79268064d7782e0c800e707b9785edc';
 
 @ProviderFor(embeddedSourceBackend)
 final embeddedSourceBackendProvider = EmbeddedSourceBackendProvider._();
@@ -141,4 +141,4 @@ final class EmbeddedSourceRouterProvider
 }
 
 String _$embeddedSourceRouterHash() =>
-    r'948566767b9e24d753192c01b94af27faed10c14';
+    r'037753bc0e107e7721beeb799f751a568fbd58b2';
