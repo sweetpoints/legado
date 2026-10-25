@@ -701,6 +701,7 @@ class FlutterRuleSubscriptionUiTest {
             var trace = "not observed"
             var scrollAttempts = 0
             var scrollAccepted = 0
+            var actionDispatched = false
             try {
             driver.await("visible enabled automatic control above zero interval") {
                 if (!frameReady.get()) return@await false
@@ -755,10 +756,19 @@ class FlutterRuleSubscriptionUiTest {
                 }
                 false
             }
+                actionDispatched = true
             } catch (failure: AssertionError) {
-                probe("automatic-after-zero-failed", "auto")
-                throw AssertionError("${failure.message}; frameReady=${frameReady.get()}," +
-                    "scrollAttempts=$scrollAttempts,scrollAccepted=$scrollAccepted;$trace", failure)
+                runCatching { probe("automatic-after-zero-failed", "auto") }
+                    .exceptionOrNull()?.let { failure.addSuppressed(it) }
+                failure.addSuppressed(AssertionError("frameReady=${frameReady.get()}," +
+                    "scrollAttempts=$scrollAttempts,scrollAccepted=$scrollAccepted;${trace.take(384)}"))
+                throw failure
+            } finally {
+                runCatching {
+                    Log.i("RuleSubUiProbe", "phase=automatic-after-zero-helper,actionDispatched=$actionDispatched," +
+                        "frameReady=${frameReady.get()},scrollAttempts=$scrollAttempts," +
+                        "scrollAccepted=$scrollAccepted;${trace.take(384)}")
+                }
             }
         }
         currentType = 0
