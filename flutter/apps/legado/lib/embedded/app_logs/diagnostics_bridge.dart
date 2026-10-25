@@ -9,6 +9,7 @@ class DiagnosticsSnapshot {
         binding.isEmpty ||
         revision < 1 ||
         number('sequence') < 0 ||
+        number('viewportEpoch') < 0 ||
         rows.length > 100 ||
         rows.map((r) => r['id']).toSet().length != rows.length ||
         rows.any(

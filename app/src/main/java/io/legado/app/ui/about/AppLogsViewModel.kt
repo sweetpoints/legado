@@ -24,6 +24,7 @@ enum class AppLogNotice {
 data class AppLogsUiState(
     val logs: List<AppLogRow> = emptyList(),
     val isLoading: Boolean = true,
+    val listEstablished: Boolean = false,
     val isWorking: Boolean = false,
     val showClearConfirmation: Boolean = false,
     val error: String? = null,
@@ -70,7 +71,7 @@ class AppLogsViewModel(
             try {
                 repository.logs.collect { logs ->
                     coroutineContext.ensureActive()
-                    mutableState.update { it.copy(logs = logs, isLoading = false) }
+                    mutableState.update { it.copy(logs = logs, isLoading = false, listEstablished = true) }
                 }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -106,7 +107,11 @@ class AppLogsViewModel(
         if (!state.value.showClearConfirmation || state.value.isBusy) return
         setClearConfirmation(false)
         mutableState.update { it.copy(openedLog = null, export = null) }
-        operate { repository.clearLogs() }
+        operate {
+            repository.clearLogs()
+            coroutineContext.ensureActive()
+            mutableState.update { it.copy(logs = emptyList(), listEstablished = true) }
+        }
     }
 
     fun openLog(id: Long) {

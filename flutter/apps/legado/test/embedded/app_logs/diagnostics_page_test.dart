@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -10,8 +11,8 @@ import 'package:legado_app/l10n/generated/app_localizations.dart';
 
 class FakeBridge extends DiagnosticsBridge {
   FakeBridge({super.crash});
-  int revision = 0, page = 0;
-  bool confirm = false, busy = false;
+  int revision = 0, page = 0, epoch = 0;
+  bool confirm = false, busy = false, established = true;
   int savedIndex = 0;
   double savedOffset = 0;
   final commands = <String>[];
@@ -32,7 +33,9 @@ class FakeBridge extends DiagnosticsBridge {
     'binding': 'binding',
     'revision': ++revision,
     'sequence': 0,
+    'viewportEpoch': epoch,
     'busy': busy,
+    'listEstablished': established,
     'error': false,
     'notice': null,
     'confirmClear': confirm,
@@ -50,6 +53,16 @@ class FakeBridge extends DiagnosticsBridge {
     Map<String, Object?> args = const {},
   ]) async {
     commands.add(op);
+    if (const {
+      'next',
+      'previous',
+      'clear',
+      'confirmClear',
+      'retry',
+      'back',
+    }.contains(op)) {
+      epoch++;
+    }
     if (op == 'scroll') scrollReceipts.add(Map.of(args));
     if (op == 'clear') {
       if (crash) {
@@ -66,6 +79,47 @@ class FakeBridge extends DiagnosticsBridge {
     if (op == 'next') page++;
     if (op == 'previous') page--;
     emit();
+  }
+}
+
+class DelayedNavigationBridge extends FakeBridge {
+  final releaseNext = Completer<void>();
+  Future<void> queue = Future.value();
+  final requests = <String>[];
+  @override
+  Future<void> command(String op, [Map<String, Object?> args = const {}]) {
+    requests.add(op);
+    final work = queue.then((_) async {
+      if (op == 'next') await releaseNext.future;
+      await super.command(op, args);
+      if (op == 'scroll' && args['id'] is String) {
+        final global = entries.indexWhere((row) => row['id'] == args['id']);
+        if (global >= 0) {
+          page = global ~/ 100;
+          emit();
+        }
+      }
+    });
+    queue = work.catchError((Object _) {});
+    return work;
+  }
+}
+
+class AutoProjectionBridge extends FakeBridge {
+  @override
+  Future<void> command(
+    String op, [
+    Map<String, Object?> args = const {},
+  ]) async {
+    if (op == 'scroll' && args['id'] is String) {
+      final global = entries.indexWhere((row) => row['id'] == args['id']);
+      if (global >= 0) {
+        page = global ~/ 100;
+        savedIndex = global % 100;
+        savedOffset = (args['offset'] as num).toDouble();
+      }
+    }
+    await super.command(op, args);
   }
 }
 
@@ -132,6 +186,76 @@ void main() {
         messenger.setMockMethodCallHandler(method, null);
         messenger.setMockMethodCallHandler(event, null);
       }
+    },
+  );
+  testWidgets('blocked next response retires the old viewport save timer', (
+    tester,
+  ) async {
+    final bridge = DelayedNavigationBridge();
+    await mount(tester, bridge);
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    bridge.requests.clear();
+    final list = tester.widget<ListView>(find.byType(ListView).first);
+    list.controller!.jumpTo(96 * 152);
+    await tester.pump();
+    await tester.tap(find.text('Next'));
+    await tester.pump(const Duration(milliseconds: 200));
+    try {
+      expect(bridge.requests.first, 'next');
+      expect(bridge.requests.where((op) => op == 'scroll'), isEmpty);
+    } finally {
+      bridge.releaseNext.complete();
+      await tester.pumpAndSettle();
+    }
+    expect(bridge.page, 1);
+    expect(find.text('Synthetic 100'), findsOneWidget);
+  });
+  testWidgets(
+    'auto-page projection preserves the newer unsent local business anchor',
+    (tester) async {
+      final bridge = AutoProjectionBridge();
+      bridge.entries = List.generate(
+        205,
+        (i) => {
+          'id': 'opaque-$i',
+          'text': 'Synthetic $i',
+          'time': '',
+          'details': false,
+          'truncated': false,
+          'links': <String>[],
+        },
+      );
+      bridge.savedIndex = 96;
+      await mount(tester, bridge);
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpAndSettle();
+      final list = tester.widget<ListView>(find.byType(ListView).first);
+      list.controller!.jumpTo(90 * 152);
+      await tester.pump();
+      bridge.entries.insertAll(
+        0,
+        List.generate(
+          5,
+          (i) => {
+            'id': 'new-$i',
+            'text': 'New $i',
+            'time': '',
+            'details': false,
+            'truncated': false,
+            'links': <String>[],
+          },
+        ),
+      );
+      bridge.page = 1;
+      bridge.savedIndex = 1;
+      bridge.emit();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpAndSettle();
+      expect(bridge.page, 0);
+      expect(list.controller!.offset, closeTo(95 * 152, 0.1));
+      expect(bridge.scrollReceipts.last['id'], 'opaque-90');
     },
   );
   testWidgets('export identifier owns its advertised actual tap action', (

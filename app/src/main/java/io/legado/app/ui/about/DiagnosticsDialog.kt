@@ -18,6 +18,7 @@ abstract class DiagnosticsDialog : BaseDialogFragment(0) {
     internal abstract fun rows(): List<DiagnosticsRow>
     internal abstract fun busy(): Boolean
     internal abstract fun failed(): Boolean
+    internal abstract fun listEstablished(): Boolean
     internal abstract fun notice(): String?
     internal abstract fun confirmation(): Boolean
     internal abstract fun act(op: String, id: String?)
@@ -29,6 +30,7 @@ abstract class DiagnosticsDialog : BaseDialogFragment(0) {
     private var binding = ""
     private var sequence = 0L
     private var revision = 0L
+    private val viewportEpoch = DiagnosticsViewportEpoch()
     private var tokens = emptyMap<String, String>()
     private val identities = mutableMapOf<String, String>()
     internal fun displayIds(): List<String> = tokens.keys.toList()
@@ -41,16 +43,16 @@ abstract class DiagnosticsDialog : BaseDialogFragment(0) {
         val all = rows()
         val savedScroll = scroll()
         val viewport = DiagnosticsViewport.project(all.map { it.id },
-            DiagnosticsViewportCheckpoint(page, savedScroll.first, savedScroll.second, scrollAnchor()), !busy() && !failed())
+            DiagnosticsViewportCheckpoint(page, savedScroll.first, savedScroll.second, scrollAnchor()), !busy() && !failed() && listEstablished())
         val pages = viewport.pages
         page = viewport.checkpoint.page
-        if (!busy() && !failed()) rememberScroll(viewport.checkpoint.index, viewport.checkpoint.offset, viewport.checkpoint.anchor)
+        if (!busy() && !failed() && listEstablished()) rememberScroll(viewport.checkpoint.index, viewport.checkpoint.offset, viewport.checkpoint.anchor)
         val visible = all.drop(viewport.page * 100).take(100)
         identities.keys.retainAll(all.map { it.id }.toSet())
         tokens = visible.associate { row -> identities.getOrPut(row.id) { UUID.randomUUID().toString() } to row.id }
         val (index, offset) = scroll()
-        return mapOf("schemaVersion" to 1, "binding" to owner, "revision" to ++revision, "sequence" to sequence,
-            "busy" to busy(), "error" to failed(), "notice" to notice(), "confirmClear" to confirmation(),
+        return mapOf("schemaVersion" to 1, "binding" to owner, "revision" to ++revision, "sequence" to sequence, "viewportEpoch" to viewportEpoch.value,
+            "listEstablished" to listEstablished(), "busy" to busy(), "error" to failed(), "notice" to notice(), "confirmClear" to confirmation(),
             "page" to viewport.page, "pages" to pages, "scrollIndex" to index, "scrollOffset" to offset,
             "rows" to visible.map { row -> mapOf("id" to identities.getValue(row.id), "time" to row.time.take(80),
                 "text" to row.text.take(512), "links" to row.links.map { it.take(120) }, "details" to row.details, "truncated" to (row.text.length > 512)) })
@@ -64,8 +66,11 @@ abstract class DiagnosticsDialog : BaseDialogFragment(0) {
         require(!confirmation() || op in setOf("scroll", "back", "cancelClear", "confirmClear"))
         when (op) {
             "scroll" -> {
-                require(args.keys == setOf("binding", "sequence", "op", "index", "offset", "id"))
-                require(!busy() && !failed())
+                require(args.keys == setOf("binding", "sequence", "op", "index", "offset", "id", "viewportEpoch"))
+                val receiptEpoch = (args["viewportEpoch"] as Number).toLong()
+                // Stale internal receipts are consumed silently; they are never replayed.
+                if (!viewportEpoch.accepts(receiptEpoch)) return snapshot(owner)
+                require(!busy() && !failed() && listEstablished())
                 val index = (args["index"] as Number).toInt()
                 val offset = (args["offset"] as Number).toDouble()
                 require(offset.isFinite() && offset >= 0 && offset <= 10_000_000)
@@ -82,6 +87,7 @@ abstract class DiagnosticsDialog : BaseDialogFragment(0) {
             }
             "previous", "next" -> {
                 require(args.keys == setOf("binding", "sequence", "op") && !busy())
+                viewportEpoch.retire()
                 page += if (op == "next") 1 else -1; rememberScroll(0, 0.0)
             }
             "link" -> {
@@ -95,6 +101,7 @@ abstract class DiagnosticsDialog : BaseDialogFragment(0) {
             }
             else -> {
                 require(args.keys == setOf("binding", "sequence", "op"))
+                if (op in setOf("clear", "confirmClear", "retry")) viewportEpoch.retire()
                 act(op, null)
             }
         }
@@ -102,6 +109,7 @@ abstract class DiagnosticsDialog : BaseDialogFragment(0) {
     }
     internal fun release(owner: String) { if (binding == owner) binding = "" }
     internal fun closePage() {
+        viewportEpoch.retire()
         if (confirmation()) act("cancelClear", null) else dismissAllowingStateLoss()
     }
     override fun onCreate(savedInstanceState: Bundle?) {

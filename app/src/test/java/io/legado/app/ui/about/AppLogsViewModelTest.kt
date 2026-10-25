@@ -39,6 +39,33 @@ class AppLogsViewModelTest {
     }
 
     @Test
+    fun exportAfterInitialSourceFailureCannotEstablishAnEmptyListCheckpoint() = runTest(dispatcher) {
+        var failSource = true
+        val repository = object : AppLogsRepository {
+            override val logs = flow {
+                if (failSource) error("Synthetic source failure")
+                emit((0..104).map { AppLogRow(it.toLong(), "time", "Synthetic $it", false) })
+            }
+            override suspend fun readDetail(id: Long): AppLogDetail? = null
+            override suspend fun clearLogs() = Unit
+            override suspend fun prepareExport(): AppLogExport = AppLogExport.Text("synthetic export")
+        }
+        val model = model(repository)
+        val saved = DiagnosticsViewportCheckpoint(1, 0, 0.0, null)
+        model.startObserving(); runCurrent()
+        assertNotNull(model.state.value.error)
+        model.prepareExport(); runCurrent()
+        assertNull(model.state.value.error)
+        assertFalse(model.state.value.isBusy)
+        assertFalse(model.state.value.listEstablished)
+        assertEquals(saved, DiagnosticsViewport.project(emptyList(), saved, model.state.value.listEstablished).checkpoint)
+        model.consumeExport(requireNotNull(model.state.value.export))
+        failSource = false; model.refresh(); runCurrent()
+        assertTrue(model.state.value.listEstablished)
+        assertEquals(1, DiagnosticsViewport.project(model.state.value.logs.map { it.id.toString() }, saved, model.state.value.listEstablished).page)
+    }
+
+    @Test
     fun clearConfirmationAndViewportRestoreWithoutSavingAnyLogBodies() = runTest(dispatcher) {
         val handle = SavedStateHandle()
         val repository = FakeRepository(listOf(row))
