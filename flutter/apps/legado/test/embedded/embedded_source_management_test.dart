@@ -161,6 +161,10 @@ void main() {
   });
 
   for (final route in [
+    '/bookmark-editor',
+    '/all-bookmarks',
+    '/app-logs',
+    '/crash-logs',
     '/highlight-manager',
     '/highlight-groups',
     '/txt-toc-manager',

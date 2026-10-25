@@ -30,6 +30,10 @@ import 'highlight_manager/highlight_manager_page.dart';
 import 'highlight_manager/highlight_groups_page.dart';
 import 'txt_toc_manager/txt_toc_manager_page.dart';
 import 'named_groups/named_groups_page.dart';
+import 'bookmark_editor/bookmark_editor_page.dart';
+import 'all_bookmarks/all_bookmarks_page.dart';
+import 'app_logs/app_logs_page.dart';
+import 'crash_logs/crash_logs_page.dart';
 
 part 'embedded_source_management.g.dart';
 
@@ -50,6 +54,10 @@ Future<EmbeddedSourceConfiguration> embeddedSourceConfiguration(Ref ref) async {
       .invokeMapMethod<String, Object?>('bootstrap');
   if (result == null ||
       ![
+        '/bookmark-editor',
+        '/all-bookmarks',
+        '/app-logs',
+        '/crash-logs',
         '/highlight-manager',
         '/highlight-groups',
         '/txt-toc-manager',
@@ -101,6 +109,16 @@ GoRouter embeddedSourceRouter(Ref ref) {
     restorationScopeId: 'embedded-router',
     initialLocation: configuration.route,
     routes: [
+      GoRoute(
+        path: '/bookmark-editor',
+        builder: (_, _) => const BookmarkEditorPage(),
+      ),
+      GoRoute(
+        path: '/all-bookmarks',
+        builder: (_, _) => const AllBookmarksPage(),
+      ),
+      GoRoute(path: '/app-logs', builder: (_, _) => const AppLogsPage()),
+      GoRoute(path: '/crash-logs', builder: (_, _) => const CrashLogsPage()),
       GoRoute(
         path: '/highlight-manager',
         builder: (_, _) => const HighlightManagerPage(),

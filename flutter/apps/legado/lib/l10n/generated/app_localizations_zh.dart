@@ -10,6 +10,21 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get allBookmarksTitle => '全部书签';
+
+  @override
+  String get allBookmarksExportJson => '导出 JSON';
+
+  @override
+  String get allBookmarksExportMarkdown => '导出 Markdown';
+
+  @override
+  String get allBookmarksRetry => '重试';
+
+  @override
+  String get allBookmarksError => '书签加载失败，请重试。';
+
+  @override
   String get appTitle => '阅读';
 
   @override
@@ -169,6 +184,66 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get licensesTitle => '开源许可证';
+
+  @override
+  String get appLogsTitle => '日志';
+
+  @override
+  String get appLogsExport => '导出';
+
+  @override
+  String get appLogsEmpty => '暂无日志';
+
+  @override
+  String get appLogsShareFailed => '无法分享日志';
+
+  @override
+  String get appLogsClearConfirm => '清除全部日志？';
+
+  @override
+  String get diagnosticsClose => '关闭';
+
+  @override
+  String get diagnosticsClear => '清除';
+
+  @override
+  String get diagnosticsCancel => '取消';
+
+  @override
+  String get diagnosticsRetry => '重试';
+
+  @override
+  String get diagnosticsError => '无法加载日志，请重试。';
+
+  @override
+  String get diagnosticsDetails => '详情';
+
+  @override
+  String get diagnosticsPrevious => '上一页';
+
+  @override
+  String get diagnosticsNext => '下一页';
+
+  @override
+  String get bookmarkEditorTitle => '书签';
+
+  @override
+  String get bookmarkEditorText => '正文';
+
+  @override
+  String get bookmarkEditorContent => '笔记';
+
+  @override
+  String get bookmarkEditorDelete => '删除';
+
+  @override
+  String get bookmarkEditorCancel => '取消';
+
+  @override
+  String get bookmarkEditorConfirm => '确定';
+
+  @override
+  String get bookmarkEditorBridgeError => '书签编辑器暂不可用，请重试。';
 
   @override
   String get shelfOptions => '书架选项';
@@ -412,6 +487,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get codeEditorSearchRejected => '搜索修改未被接受，已恢复。请重试或重新编辑搜索后再保存或替换。';
+
+  @override
+  String get crashLogsTitle => '崩溃日志';
+
+  @override
+  String get crashLogsEmpty => '暂无崩溃日志';
 
   @override
   String get dictionaryEditorTitle => '字典规则';

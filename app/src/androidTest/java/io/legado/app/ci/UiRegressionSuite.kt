@@ -6,6 +6,12 @@ import org.junit.runners.Suite
 // One runner argument avoids losing comma-separated class names in AGP's test engine.
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
+    io.legado.app.ui.about.FlutterDiagnosticsUiTest::class,
+    io.legado.app.ui.book.bookmark.BookmarkEditorRestoreTest::class,
+    io.legado.app.ui.book.bookmark.AllBookmarksHostTest::class,
+    io.legado.app.ui.book.toc.TocBookmarksHostTest::class,
+    io.legado.app.data.repository.BookmarkEditorRepositoryTest::class,
+    io.legado.app.data.repository.AllBookmarksRepositoryTest::class,
     io.legado.app.ui.highlight.FlutterHighlightManagementUiTest::class,
     io.legado.app.ui.book.toc.rule.FlutterTxtTocManagerUiTest::class,
     io.legado.app.ui.group.NamedGroupsHostTest::class,
