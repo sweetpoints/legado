@@ -246,7 +246,7 @@ class FlutterDiagnosticsUiTest {
                 val fixtureLabel = Regex("^Synthetic boundary row ([0-9]+)$")
                 fun nodeScalars(node: AccessibilityNodeInfo): String {
                     val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
-                    return "visible=${node.isVisibleToUser},enabled=${node.isEnabled},scrollable=${node.isScrollable}," +
+                    return "class=${node.className?.toString()?.take(80)},visible=${node.isVisibleToUser},enabled=${node.isEnabled},scrollable=${node.isScrollable}," +
                         "window=${node.windowId},bounds=$bounds,actions=${node.actionList.take(16).map { it.id }}"
                 }
                 try {
@@ -289,9 +289,28 @@ class FlutterDiagnosticsUiTest {
                         false
                     }
                 } catch (failure: AssertionError) {
+                    val failureNodes = java.util.ArrayDeque<AccessibilityNodeInfo>()
+                    val failureList = driver.node("app-logs-list")
+                    val failureListFound = failureList != null
+                    failureList?.let(failureNodes::add)
+                    val failureVisible = linkedSetOf<Int>()
+                    var sampled = 0
+                    while (failureNodes.isNotEmpty() && sampled++ < 512) {
+                        val node = failureNodes.removeFirst()
+                        if (node.isVisibleToUser) {
+                            val value = node.text?.toString()?.takeIf { it.isNotEmpty() }
+                                ?: node.contentDescription?.toString().orEmpty()
+                            fixtureLabel.matchEntire(value)?.groupValues?.get(1)?.toIntOrNull()?.let(failureVisible::add)
+                        }
+                        for (child in 0 until node.childCount) node.getChild(child)?.let(failureNodes::add)
+                        node.recycle()
+                    }
+                    failureNodes.forEach { it.recycle() }
+                    val progressPresent = driver.node("app-logs-progress")?.let { it.recycle(); true } ?: false
                     throw AssertionError("${failure.message}; awaitingIndex=$awaitingIndex,dispatches=$dispatches," +
                         "lastDispatchResult=$lastDispatchResult,listFound=$listFound,native=[$nativeScalars]," +
-                        "list=[$listScalars],action=[$actionScalars],lastVisibleFixtureIndices=$visibleFixtureIndices")
+                        "list=[$listScalars],action=[$actionScalars],lastVisibleFixtureIndices=$visibleFixtureIndices," +
+                        "failureListFound=$failureListFound,failureVisibleFixtureIndices=${failureVisible.take(8)},progressPresent=$progressPresent")
                         .also { it.initCause(failure) }
                 }
                 var anchorIndex = 0; var offset = 0.0
