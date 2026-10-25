@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import io.legado.app.base.BaseThemedActivity
 import io.legado.app.data.repository.*
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
@@ -54,11 +55,13 @@ class DiagnosticsFixtureModel : ViewModel() {
         }
     }
     var crashEntries = (0..104).map { CrashLogEntry("fixture-native-$it", "Synthetic-$it.log") }
+    var crashLoadGate: CompletableDeferred<Unit>? = null
     var crashFailure = false
     var partialClear = false
     var crashReads = 0
     val crash = object : CrashLogsRepository {
         override suspend fun loadLogs(): List<CrashLogEntry> {
+            crashLoadGate?.await()
             check(!crashFailure) { "Synthetic load failure" }; return crashEntries
         }
         override suspend fun readLog(id: String): CrashLogContent {

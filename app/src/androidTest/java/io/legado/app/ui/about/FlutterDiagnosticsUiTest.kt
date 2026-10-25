@@ -34,20 +34,24 @@ class FlutterDiagnosticsUiTest {
         return equal
     }
     private fun click(driver: FlutterUiTestDriver, id: String) {
-        var clicked = false
+        var action: AccessibilityNodeInfo? = null
         driver.await("actual advertised diagnostics action $id") {
-            if(clicked) return@await true
             val nodes = java.util.ArrayDeque<AccessibilityNodeInfo>()
             driver.node(id)?.let(nodes::add) ?: return@await false
             while(nodes.isNotEmpty()) {
                 val node = nodes.removeFirst()
-                if(!clicked && node.isVisibleToUser && node.isEnabled && node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
-                    clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                for(index in 0 until node.childCount) node.getChild(index)?.let(nodes::add)
-                node.recycle()
+                if(action == null && node.isVisibleToUser && node.isEnabled && node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }) {
+                    action = node
+                } else {
+                    for(index in 0 until node.childCount) node.getChild(index)?.let(nodes::add)
+                    node.recycle()
+                }
             }
-            clicked
+            action != null
         }
+        val actual = requireNotNull(action)
+        try { assertTrue("Single actual click rejected: $id", actual.performAction(AccessibilityNodeInfo.ACTION_CLICK)) }
+        finally { actual.recycle() }
     }
     private fun rowId(scenario: ActivityScenario<DiagnosticsFixtureActivity>, crash: Boolean = false, index: Int = 0): String {
         var id = ""
@@ -224,6 +228,84 @@ class FlutterDiagnosticsUiTest {
             }
         }
     }
+    @Test fun normalAppLivePrependCarriesVisibleBusinessAnchorAcrossPageBoundary() {
+        FlutterUiTestDriver(instrumentation).use { driver -> driver.enableAccessibility()
+            launch().use { scenario ->
+                val original = (0..249).map { AppLogRow(it.toLong() + 1, "12:00", "Synthetic boundary row $it", false) }
+                scenario.onActivity { it.fixture.entries.value = original }
+                click(driver, "app-logs-next")
+                driver.await("actual second page") { exactText(driver, "app-logs-list", "Synthetic boundary row 100") }
+                var awaitingIndex = -1
+                driver.await("actual viewport near the page tail") {
+                    var index = 0
+                    scenario.onActivity { host -> index = (host.supportFragmentManager.findFragmentByTag("logs") as AppLogDialog).model.scrollIndex }
+                    if(index >= 94 && exactText(driver, "app-logs-list", "Synthetic boundary row ${100 + index}")) return@await true
+                    if(awaitingIndex >= 0 && index <= awaitingIndex) return@await false
+                    val nodes = java.util.ArrayDeque<AccessibilityNodeInfo>()
+                    driver.node("app-logs-list")?.let(nodes::add) ?: return@await false
+                    var sent = false
+                    while(nodes.isNotEmpty()) {
+                        val node = nodes.removeFirst()
+                        if(!sent && node.isVisibleToUser && node.isEnabled && node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD })
+                            sent = node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                        for(child in 0 until node.childCount) node.getChild(child)?.let(nodes::add)
+                        node.recycle()
+                    }
+                    if(sent) awaitingIndex = index
+                    false
+                }
+                var anchorIndex = 0; var offset = 0.0
+                scenario.onActivity { host ->
+                    val model = (host.supportFragmentManager.findFragmentByTag("logs") as AppLogDialog).model
+                    anchorIndex = 100 + model.scrollIndex; offset = model.scrollOffset
+                    assertNotNull(model.scrollAnchor)
+                    host.fixture.entries.value = (1..20).map { AppLogRow(-it.toLong(), "12:01", "Synthetic prepend $it", false) } + original
+                }
+                driver.await("same actual business anchor after it crosses into page two") {
+                    var receipt = false
+                    scenario.onActivity { host ->
+                        val dialog = host.supportFragmentManager.findFragmentByTag("logs") as AppLogDialog
+                        receipt = dialog.page == 2 && dialog.model.scrollIndex == (anchorIndex + 20) % 100 && kotlin.math.abs(dialog.model.scrollOffset - offset) < 1.0
+                    }
+                    receipt && exactText(driver, "app-logs-list", "Synthetic boundary row $anchorIndex")
+                }
+            }
+        }
+    }
+
+    @Test fun normalCrashNewOwnerKeepsPageOneAcrossDelayedLoadFailureAndRetry() {
+        FlutterUiTestDriver(instrumentation).use { driver -> driver.enableAccessibility()
+            launch(crash = true).use { scenario ->
+                click(driver, "crash-logs-next")
+                driver.await("actual page one before owner replacement") { exactText(driver, "crash-logs-list", "Synthetic-100.log") }
+                scenario.onActivity { host ->
+                    val old = host.supportFragmentManager.findFragmentByTag("logs") as CrashLogsDialog
+                    val checkpoint = host.supportFragmentManager.saveFragmentInstanceState(old)
+                    host.fixture.crashLoadGate = kotlinx.coroutines.CompletableDeferred()
+                    host.supportFragmentManager.beginTransaction().remove(old).commitNow()
+                    CrashLogsDialog().apply { setInitialSavedState(checkpoint) }.showNow(host.supportFragmentManager, "logs")
+                }
+                driver.await("new VM loading has not consumed saved page checkpoint") {
+                    var pending = false; scenario.onActivity { host ->
+                        val dialog = host.supportFragmentManager.findFragmentByTag("logs") as CrashLogsDialog
+                        pending = dialog.model.state.value.isLoading && dialog.model.state.value.logs.isEmpty() && dialog.page == 1
+                    }; pending && exists(driver, "crash-logs-progress")
+                }
+                scenario.onActivity { host -> host.fixture.crashFailure = true; host.fixture.crashLoadGate!!.complete(Unit) }
+                driver.awaitIdentifier("crash-logs-error")
+                scenario.onActivity { host ->
+                    assertEquals(1, (host.supportFragmentManager.findFragmentByTag("logs") as CrashLogsDialog).page)
+                    host.fixture.crashFailure = false; host.fixture.crashLoadGate = null
+                }
+                click(driver, "crash-logs-retry")
+                driver.await("successful delayed reload restores actual page one") {
+                    var restored = false; scenario.onActivity { host -> restored = (host.supportFragmentManager.findFragmentByTag("logs") as CrashLogsDialog).page == 1 }
+                    restored && exactText(driver, "crash-logs-list", "Synthetic-100.log")
+                }
+            }
+        }
+    }
+
     @Test fun normalCrashPartialClearRefreshesRemainingAndRetryRecoversLoadFailure() {
         FlutterUiTestDriver(instrumentation).use { driver -> driver.enableAccessibility()
             launch(crash = true).use { scenario ->

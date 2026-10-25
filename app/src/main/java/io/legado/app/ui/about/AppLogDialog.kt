@@ -42,7 +42,8 @@ class AppLogDialog : DiagnosticsDialog() {
     override fun notice() = model.state.value.notice?.name
     override fun confirmation() = model.state.value.showClearConfirmation
     override fun scroll() = model.scrollIndex to model.scrollOffset
-    override fun rememberScroll(index: Int, offset: Double) = model.rememberScroll(index, offset)
+    override fun scrollAnchor() = model.scrollAnchor
+    override fun rememberScroll(index: Int, offset: Double, anchor: String?) = model.rememberScroll(index, offset, anchor)
     override fun act(op: String, id: String?) { when(op) {
         "open" -> model.openLog(requireNotNull(id).toLong())
         "clear" -> model.requestClear()
