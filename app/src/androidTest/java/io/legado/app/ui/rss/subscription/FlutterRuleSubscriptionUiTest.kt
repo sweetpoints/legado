@@ -698,15 +698,25 @@ class FlutterRuleSubscriptionUiTest {
         }
         fun clickAutomaticAfterZero() {
             val frameReady = AtomicBoolean(true)
+            var trace = "not observed"
+            var scrollAttempts = 0
+            var scrollAccepted = 0
+            try {
             driver.await("visible enabled automatic control above zero interval") {
                 if (!frameReady.get()) return@await false
                 driver.node("subscription-auto")?.let { control ->
+                    trace = "automatic identifier present; no checkable descendant"
                     val pending = ArrayDeque<AccessibilityNodeInfo>()
                     pending.add(control)
                     try {
                         while (pending.isNotEmpty()) {
                             val current = pending.removeFirst()
                             try {
+                                if (current.isCheckable) {
+                                    val bounds = Rect(); current.getBoundsInScreen(bounds)
+                                    trace = "checkable visible=${current.isVisibleToUser},enabled=${current.isEnabled}," +
+                                        "checked=${current.isChecked},click=${current.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }},bounds=$bounds"
+                                }
                                 if (current.isVisibleToUser && current.isEnabled && current.isCheckable &&
                                     !current.isChecked && current.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }) {
                                     // One real action on the automatic switch, never on an ancestor.
@@ -727,7 +737,11 @@ class FlutterRuleSubscriptionUiTest {
                             // Zero was just revealed at the bottom. Automatic is above it;
                             // CI's owned ScrollView advertised only BACKWARD at this point.
                             val backward = AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                            val bounds = Rect(); current.getBoundsInScreen(bounds)
+                            trace = "automatic identifier absent; scroll owner bounds=$bounds,actions=${current.actionList.map { it.id }}"
+                            if (current.actionList.any { it.id == backward }) scrollAttempts++
                             if (current.actionList.any { it.id == backward } && current.performAction(backward)) {
+                                scrollAccepted++
                                 frameReady.set(false)
                                 scenario!!.onActivity { activity ->
                                     activity.window.decorView.postOnAnimation { frameReady.set(true) }
@@ -740,6 +754,11 @@ class FlutterRuleSubscriptionUiTest {
                     current.recycle()
                 }
                 false
+            }
+            } catch (failure: AssertionError) {
+                probe("automatic-after-zero-failed", "auto")
+                throw AssertionError("${failure.message}; frameReady=${frameReady.get()}," +
+                    "scrollAttempts=$scrollAttempts,scrollAccepted=$scrollAccepted;$trace", failure)
             }
         }
         currentType = 0
