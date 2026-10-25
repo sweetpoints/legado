@@ -50,9 +50,15 @@ class AppLogsViewModel(
     internal var scrollOffset: Double
         get() = savedStateHandle["diagnostics.scrollOffset"] ?: 0.0
         private set(value) { savedStateHandle["diagnostics.scrollOffset"] = value }
-    internal fun rememberScroll(index: Int, offset: Double) {
+    internal var scrollAnchor: String?
+        get() = savedStateHandle["diagnostics.scrollAnchor"]
+        private set(value) {
+            if (value == null) savedStateHandle.remove<String>("diagnostics.scrollAnchor")
+            else savedStateHandle["diagnostics.scrollAnchor"] = value
+        }
+    internal fun rememberScroll(index: Int, offset: Double, anchor: String? = null) {
         require(index >= 0 && index <= 100_000 && offset.isFinite() && offset >= 0 && offset <= 10_000_000)
-        scrollIndex = index; scrollOffset = offset
+        scrollIndex = index; scrollOffset = offset; scrollAnchor = anchor
     }
 
     private var observation: Job? = null

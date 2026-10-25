@@ -21,7 +21,8 @@ abstract class DiagnosticsDialog : BaseDialogFragment(0) {
     internal abstract fun notice(): String?
     internal abstract fun confirmation(): Boolean
     internal abstract fun act(op: String, id: String?)
-    internal abstract fun rememberScroll(index: Int, offset: Double)
+    internal abstract fun rememberScroll(index: Int, offset: Double, anchor: String? = null)
+    internal abstract fun scrollAnchor(): String?
     internal abstract fun scroll(): Pair<Int, Double>
     internal open fun openLink(id: String, index: Int) { error("Links unavailable") }
     internal var page = 0
@@ -38,15 +39,19 @@ abstract class DiagnosticsDialog : BaseDialogFragment(0) {
     internal fun snapshot(owner: String): Map<String, Any?> {
         require(owner == binding && isAdded)
         val all = rows()
-        val pages = maxOf(1, (all.size + 99) / 100)
-        page = page.coerceIn(0, pages - 1)
-        val visible = all.drop(page * 100).take(100)
+        val savedScroll = scroll()
+        val viewport = DiagnosticsViewport.project(all.map { it.id },
+            DiagnosticsViewportCheckpoint(page, savedScroll.first, savedScroll.second, scrollAnchor()), !busy() && !failed())
+        val pages = viewport.pages
+        page = viewport.checkpoint.page
+        if (!busy() && !failed()) rememberScroll(viewport.checkpoint.index, viewport.checkpoint.offset, viewport.checkpoint.anchor)
+        val visible = all.drop(viewport.page * 100).take(100)
         identities.keys.retainAll(all.map { it.id }.toSet())
         tokens = visible.associate { row -> identities.getOrPut(row.id) { UUID.randomUUID().toString() } to row.id }
         val (index, offset) = scroll()
         return mapOf("schemaVersion" to 1, "binding" to owner, "revision" to ++revision, "sequence" to sequence,
             "busy" to busy(), "error" to failed(), "notice" to notice(), "confirmClear" to confirmation(),
-            "page" to page, "pages" to pages, "scrollIndex" to index, "scrollOffset" to offset,
+            "page" to viewport.page, "pages" to pages, "scrollIndex" to index, "scrollOffset" to offset,
             "rows" to visible.map { row -> mapOf("id" to identities.getValue(row.id), "time" to row.time.take(80),
                 "text" to row.text.take(512), "links" to row.links.map { it.take(120) }, "details" to row.details, "truncated" to (row.text.length > 512)) })
     }
@@ -59,8 +64,21 @@ abstract class DiagnosticsDialog : BaseDialogFragment(0) {
         require(!confirmation() || op in setOf("scroll", "back", "cancelClear", "confirmClear"))
         when (op) {
             "scroll" -> {
-                require(args.keys == setOf("binding", "sequence", "op", "index", "offset"))
-                rememberScroll((args["index"] as Number).toInt(), (args["offset"] as Number).toDouble())
+                require(args.keys == setOf("binding", "sequence", "op", "index", "offset", "id"))
+                require(!busy() && !failed())
+                val index = (args["index"] as Number).toInt()
+                val offset = (args["offset"] as Number).toDouble()
+                require(offset.isFinite() && offset >= 0 && offset <= 10_000_000)
+                val token = args["id"] as? String
+                val all = rows()
+                val nativeId = if (all.isEmpty()) { require(index == 0 && token == null); null }
+                    else identities.entries.singleOrNull { it.value == token }?.key ?: error("Retired viewport anchor")
+                val globalIndex = nativeId?.let { id -> all.indexOfFirst { it.id == id }.also { require(it >= 0) } }
+                require(index in 0..99)
+                val followHead = page == 0 && index == 0 && offset == 0.0
+                val anchor = if (followHead) null else nativeId?.let(DiagnosticsViewport::anchor)
+                if (!followHead && globalIndex != null) page = globalIndex / 100
+                rememberScroll(if (followHead) 0 else globalIndex?.rem(100) ?: 0, offset, anchor)
             }
             "previous", "next" -> {
                 require(args.keys == setOf("binding", "sequence", "op") && !busy())

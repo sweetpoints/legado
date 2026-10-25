@@ -79,7 +79,10 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       failed = false;
     });
     if (target != null) pendingOffset = target;
-    if (pendingOffset != null && !offsetScheduled && !next.flag('busy')) {
+    if (pendingOffset != null &&
+        !offsetScheduled &&
+        !next.flag('busy') &&
+        !next.flag('error')) {
       offsetScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         offsetScheduled = false;
@@ -98,20 +101,25 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     if (reflecting ||
         state == null ||
         state!.flag('busy') ||
+        state!.flag('error') ||
         !scroll.hasClients) {
       return;
     }
     save?.cancel();
     save = Timer(const Duration(milliseconds: 120), () {
       if (!mounted || !scroll.hasClients) return;
+      final index = (scroll.offset / extent).floor();
+      final rows = state!.rows;
+      final id = index < rows.length ? rows[index]['id'] : null;
       final receipt =
-          '${(scroll.offset / extent).floor()}:${scroll.offset % extent}';
+          '${state!.number('page')}:$id:$index:${scroll.offset % extent}';
       if (receipt == lastScrollReceipt) return;
       lastScrollReceipt = receipt;
       unawaited(
         bridge
             .command('scroll', {
-              'index': (scroll.offset / extent).floor(),
+              'index': index,
+              'id': id,
               'offset': scroll.offset % extent,
             })
             .catchError((Object _) {
@@ -159,19 +167,19 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
         child: SafeArea(
           child: Column(
             children: [
-              Row(
+              Text(
+                widget.crash ? l.crashLogsTitle : l.appLogsTitle,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   button(
                     '$prefix-close',
                     l.diagnosticsClose,
                     'back',
                     enabled: s != null && !pending,
-                  ),
-                  Expanded(
-                    child: Text(
-                      widget.crash ? l.crashLogsTitle : l.appLogsTitle,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
                   ),
                   button('$prefix-clear', l.diagnosticsClear, 'clear'),
                   if (!widget.crash)
@@ -324,8 +332,9 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
                 ),
               ),
               if ((s?.number('pages') ?? 1) > 1)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     button(
                       '$prefix-previous',
@@ -349,8 +358,8 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
                   Column(
                     children: [
                       Text(l.appLogsClearConfirm),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
+                      Wrap(
+                        alignment: WrapAlignment.end,
                         children: [
                           button(
                             '$prefix-cancel-clear',

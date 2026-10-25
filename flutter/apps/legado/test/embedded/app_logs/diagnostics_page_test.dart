@@ -15,6 +15,7 @@ class FakeBridge extends DiagnosticsBridge {
   int savedIndex = 0;
   double savedOffset = 0;
   final commands = <String>[];
+  final scrollReceipts = <Map<String, Object?>>[];
   List<Map<String, Object?>> entries = List.generate(
     105,
     (i) => {
@@ -36,7 +37,7 @@ class FakeBridge extends DiagnosticsBridge {
     'notice': null,
     'confirmClear': confirm,
     'page': page,
-    'pages': 2,
+    'pages': ((entries.length + 99) ~/ 100).clamp(1, 100000),
     'scrollIndex': savedIndex,
     'scrollOffset': savedOffset,
     'rows': entries.skip(page * 100).take(100).toList(),
@@ -49,6 +50,7 @@ class FakeBridge extends DiagnosticsBridge {
     Map<String, Object?> args = const {},
   ]) async {
     commands.add(op);
+    if (op == 'scroll') scrollReceipts.add(Map.of(args));
     if (op == 'clear') {
       if (crash) {
         entries = [];
@@ -222,6 +224,11 @@ void main() {
       bridge.emit();
       await tester.pumpAndSettle();
       expect(list.controller!.offset, closeTo(before + 304, 0.1));
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpAndSettle();
+      final first = (list.controller!.offset / 152).floor();
+      expect(bridge.scrollReceipts.last['id'], bridge.entries[first]['id']);
+      expect(bridge.scrollReceipts.last['index'], first);
     },
   );
   testWidgets(
@@ -241,6 +248,86 @@ void main() {
       await tester.pumpAndSettle();
       final list = tester.widget<ListView>(find.byType(ListView).first);
       expect(list.controller!.offset, closeTo(5 * 152 + 10, 0.1));
+    },
+  );
+  testWidgets(
+    '320-wide double text scale keeps long log rows details links and clear controls reachable',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      for (final crash in [false, true]) {
+        final bridge = FakeBridge(crash: crash);
+        bridge.entries = [
+          {
+            'id': 'opaque-long',
+            'text': 'Synthetic preview '.padRight(512, 'x'),
+            'time': '2026-10-25 12:00:00',
+            'details': true,
+            'truncated': false,
+            'links': crash ? <String>[] : ['https://example.invalid/synthetic'],
+          },
+          ...List.generate(
+            100,
+            (i) => {
+              'id': 'more-$i',
+              'text': 'Synthetic extra $i',
+              'time': '',
+              'details': false,
+              'truncated': false,
+              'links': <String>[],
+            },
+          ),
+        ];
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: crash
+                ? CrashLogsPage(bridge: bridge)
+                : AppLogsPage(bridge: bridge),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('Details'));
+        await tester.pumpAndSettle();
+        expect(bridge.commands.where((op) => op == 'open').length, 1);
+        if (!crash) {
+          await tester.ensureVisible(
+            find.text('https://example.invalid/synthetic'),
+          );
+          final link = find
+              .ancestor(
+                of: find.text('https://example.invalid/synthetic'),
+                matching: find.byType(TextButton),
+              )
+              .first;
+          final visible = tester
+              .getRect(link)
+              .intersect(const Rect.fromLTWH(0, 0, 320, 640));
+          expect(visible.isEmpty, isFalse);
+          await tester.tapAt(visible.center);
+          await tester.pumpAndSettle();
+          expect(bridge.commands.where((op) => op == 'link').length, 1);
+        }
+        await tester.tap(find.text('Clear').first);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        if (!crash) {
+          await tester.tap(find.text('Cancel'));
+          await tester.pumpAndSettle();
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpAndSettle();
+      }
     },
   );
   test('snapshot rejects oversized projections and duplicate identity', () {

@@ -24,7 +24,8 @@ class CrashLogsDialog : DiagnosticsDialog() {
     override fun notice(): String? = null
     override fun confirmation() = false
     override fun scroll() = model.scrollIndex to model.scrollOffset
-    override fun rememberScroll(index: Int, offset: Double) = model.rememberScroll(index, offset)
+    override fun scrollAnchor() = model.scrollAnchor
+    override fun rememberScroll(index: Int, offset: Double, anchor: String?) = model.rememberScroll(index, offset, anchor)
     override fun act(op: String, id: String?) { when(op) {
         "open" -> model.openLog(requireNotNull(id))
         "clear" -> { model.clearLogs(); model.rememberScroll(0, 0.0) }
