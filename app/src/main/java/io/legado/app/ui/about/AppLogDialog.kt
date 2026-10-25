@@ -38,6 +38,7 @@ class AppLogDialog : DiagnosticsDialog() {
         requireContext().openUrl(if(link.contains("://")) link else "https://$link")
     }
     override fun busy() = model.state.value.isBusy
+    override fun listEstablished() = model.state.value.listEstablished
     override fun failed() = model.state.value.error != null
     override fun notice() = model.state.value.notice?.name
     override fun confirmation() = model.state.value.showClearConfirmation

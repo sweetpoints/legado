@@ -27,6 +27,8 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   StreamSubscription<DiagnosticsSnapshot>? subscription;
   Timer? save;
   String? lastScrollReceipt;
+  Map<String, Object?>? pendingScroll, sendingScroll;
+  int scrollGeneration = 0;
   DiagnosticsSnapshot? state;
   bool failed = false, pending = false, reflecting = false;
   static const extent = 152.0;
@@ -57,6 +59,20 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   void accept(DiagnosticsSnapshot next) {
     if (!mounted) return;
     final old = state;
+    if (old != null && old.binding != next.binding) retireScroll();
+    final local = pendingScroll;
+    if (old != null &&
+        old.binding == next.binding &&
+        old.number('viewportEpoch') == next.number('viewportEpoch') &&
+        old.number('page') != next.number('page') &&
+        local != null &&
+        !next.rows.any((row) => row['id'] == local['id'])) {
+      // A live projection used an older native receipt. Preserve the newer real
+      // local anchor until its current-epoch receipt resolves the native window.
+      save?.cancel();
+      unawaited(flushScroll());
+      return;
+    }
     final initial =
         old == null ||
         old.binding != next.binding ||
@@ -82,7 +98,8 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     if (pendingOffset != null &&
         !offsetScheduled &&
         !next.flag('busy') &&
-        !next.flag('error')) {
+        !next.flag('error') &&
+        next.flag('listEstablished')) {
       offsetScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         offsetScheduled = false;
@@ -97,43 +114,82 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     }
   }
 
+  void retireScroll() {
+    save?.cancel();
+    save = null;
+    pendingScroll = null;
+    pendingOffset = null;
+    lastScrollReceipt = null;
+    scrollGeneration++;
+  }
+
   void scrolled() {
     if (reflecting ||
+        pending ||
         state == null ||
         state!.flag('busy') ||
         state!.flag('error') ||
+        !state!.flag('listEstablished') ||
         !scroll.hasClients) {
       return;
     }
+    final index = (scroll.offset / extent).floor();
+    final rows = state!.rows;
+    pendingScroll = {
+      'index': index,
+      'id': index < rows.length ? rows[index]['id'] : null,
+      'offset': scroll.offset % extent,
+      'viewportEpoch': state!.number('viewportEpoch'),
+    };
     save?.cancel();
-    save = Timer(const Duration(milliseconds: 120), () {
-      if (!mounted || !scroll.hasClients) return;
-      final index = (scroll.offset / extent).floor();
-      final rows = state!.rows;
-      final id = index < rows.length ? rows[index]['id'] : null;
-      final receipt =
-          '${state!.number('page')}:$id:$index:${scroll.offset % extent}';
-      if (receipt == lastScrollReceipt) return;
-      lastScrollReceipt = receipt;
-      unawaited(
-        bridge
-            .command('scroll', {
-              'index': index,
-              'id': id,
-              'offset': scroll.offset % extent,
-            })
-            .catchError((Object _) {
-              lastScrollReceipt = null;
-              if (mounted) setState(() => failed = true);
-            }),
-      );
-    });
+    save = Timer(
+      const Duration(milliseconds: 120),
+      () => unawaited(flushScroll()),
+    );
+  }
+
+  Future<void> flushScroll() async {
+    final receipt = pendingScroll;
+    if (!mounted || receipt == null || identical(sendingScroll, receipt)) {
+      return;
+    }
+    final signature =
+        '${receipt['viewportEpoch']}:${receipt['id']}:${receipt['index']}:${receipt['offset']}';
+    if (signature == lastScrollReceipt) {
+      pendingScroll = null;
+      return;
+    }
+    lastScrollReceipt = signature;
+    sendingScroll = receipt;
+    final generation = scrollGeneration;
+    try {
+      await bridge.command('scroll', receipt);
+      if (identical(pendingScroll, receipt)) pendingScroll = null;
+    } catch (_) {
+      if (generation == scrollGeneration) {
+        lastScrollReceipt = null;
+        if (identical(pendingScroll, receipt)) pendingScroll = null;
+        if (mounted) setState(() => failed = true);
+      }
+    } finally {
+      if (identical(sendingScroll, receipt)) sendingScroll = null;
+    }
   }
 
   Future<void> command(
     String op, [
     Map<String, Object?> args = const {},
   ]) async {
+    if (const {
+      'next',
+      'previous',
+      'clear',
+      'confirmClear',
+      'retry',
+      'back',
+    }.contains(op)) {
+      retireScroll();
+    }
     setState(() => pending = true);
     try {
       await bridge.command(op, args);

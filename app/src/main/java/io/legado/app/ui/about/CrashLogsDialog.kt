@@ -20,6 +20,7 @@ class CrashLogsDialog : DiagnosticsDialog() {
     } } }
     override fun rows() = model.state.value.logs.map { DiagnosticsRow(it.id, "", it.name, true) }
     override fun busy() = model.state.value.isBusy
+    override fun listEstablished() = !model.state.value.isLoading && model.state.value.error == null
     override fun failed() = model.state.value.error != null
     override fun notice(): String? = null
     override fun confirmation() = false
