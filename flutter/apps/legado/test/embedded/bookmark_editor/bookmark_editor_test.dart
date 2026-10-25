@@ -350,4 +350,71 @@ void main() {
       );
     },
   );
+  testWidgets(
+    'native fitted bookmark viewport consumes retained IME once and keeps raw fields and actions reachable',
+    (t) async {
+      t.view.devicePixelRatio = 2.625;
+      t.view.physicalSize = const Size(1080, 985);
+      t.view.viewInsets = const FakeViewPadding(bottom: 809);
+      addTearDown(t.view.resetDevicePixelRatio);
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetViewInsets);
+      native = {
+        ...fixture(),
+        'text': 'Original😀',
+        'content': 'A😀BC',
+        'contentStart': 5,
+        'contentEnd': 1,
+        'focus': 'content',
+      };
+      // The floating native window already supplied its reduced FlutterView size.
+      // Mount directly in that state; do not warm a large viewport or hide the IME.
+      await app(t);
+      await t.pumpAndSettle();
+      final errors = <Object>[];
+      Object? error;
+      while ((error = t.takeException()) != null) {
+        errors.add(error!);
+      }
+      expect(
+        errors,
+        isEmpty,
+        reason:
+            'The already fitted viewport must not lose its IME height twice',
+      );
+      final note = t.widget<TextField>(find.byType(TextField).last);
+      expect(note.controller!.text, 'A😀BC');
+      expect(
+        note.controller!.selection,
+        const TextSelection(baseOffset: 5, extentOffset: 1),
+      );
+      expect(note.focusNode!.hasFocus, true);
+      for (final id in ['text', 'content']) {
+        await t.ensureVisible(
+          find.bySemanticsIdentifier('bookmark-editor-$id'),
+        );
+        await t.pumpAndSettle();
+        final finder = find.bySemanticsIdentifier('bookmark-editor-$id');
+        expect(finder.hitTestable(), findsOneWidget);
+        final bounds = t.getRect(finder);
+        expect(bounds.top, greaterThanOrEqualTo(0));
+        expect(bounds.bottom, lessThanOrEqualTo(985 / 2.625));
+        expect(bounds.height, greaterThanOrEqualTo(48));
+        expect(
+          find.bySemanticsIdentifier('bookmark-editor-cancel').hitTestable(),
+          findsOneWidget,
+        );
+        expect(
+          find.bySemanticsIdentifier('bookmark-editor-confirm').hitTestable(),
+          findsOneWidget,
+        );
+      }
+      expect(
+        t.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'Original😀',
+      );
+      expect(calls.where((call) => call['op'] != 'focus'), isEmpty);
+      expect(t.takeException(), isNull);
+    },
+  );
 }

@@ -66,6 +66,9 @@ class BookmarkDialog() : BaseDialogFragment(0) {
         super.onStart()
         setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         dialog?.window?.setBackgroundDrawableResource(R.color.transparent)
+        // Keep this floating window non-fullscreen and native-frame-fitted, like NamedGroupDialog.
+        // BookmarkEditorPage consumes the already fitted bottom inset at its own boundary.
+        // A future fullscreen/edge-to-edge host must change both sides of this IME contract.
         dialog?.window?.resizeForIme()
         dialog?.setOnKeyListener { _, key, event ->
             if (key == KeyEvent.KEYCODE_BACK) {
