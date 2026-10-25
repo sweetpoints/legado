@@ -59,6 +59,7 @@ class DefaultAppLogsRepository(private val cacheDirectory: File) : AppLogsReposi
                     AppLogDetail(id, "HTTP", HttpLogStore.get(httpId)?.detail ?: entry.message)
                 entry.throwable != null ->
                     AppLogDetail(id, "Log", entry.throwable.stackTraceToString())
+                entry.message.length > 512 -> AppLogDetail(id, "Log", entry.message)
                 else -> null
             }
         }

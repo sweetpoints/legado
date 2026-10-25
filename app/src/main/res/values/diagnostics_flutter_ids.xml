@@ -1,0 +1,4 @@
+<resources>
+    <item name="app_logs_flutter_content" type="id" />
+    <item name="crash_logs_flutter_content" type="id" />
+</resources>

@@ -39,6 +39,23 @@ class AppLogsViewModelTest {
     }
 
     @Test
+    fun clearConfirmationAndViewportRestoreWithoutSavingAnyLogBodies() = runTest(dispatcher) {
+        val handle = SavedStateHandle()
+        val repository = FakeRepository(listOf(row))
+        val first = model(repository, handle)
+        first.startObserving(); runCurrent()
+        first.requestClear(); first.rememberScroll(7, 19.5)
+        first.stopObserving()
+        val recreated = model(repository, handle)
+        assertTrue(recreated.state.value.showClearConfirmation)
+        assertEquals(7, recreated.scrollIndex)
+        assertEquals(19.5, recreated.scrollOffset, 0.0)
+        assertEquals(setOf("appLogs.confirmClear", "diagnostics.scrollIndex", "diagnostics.scrollOffset"), handle.keys())
+        recreated.dismissClearConfirmation()
+        assertFalse(recreated.state.value.showClearConfirmation)
+    }
+
+    @Test
     fun pausedObservationStopsUpdatesAndResumeCollectsTheLatestSnapshot() =
         runTest(dispatcher) {
             val repository = FakeRepository(listOf(row))

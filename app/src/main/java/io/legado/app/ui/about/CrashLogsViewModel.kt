@@ -1,5 +1,6 @@
 package io.legado.app.ui.about
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.legado.app.data.repository.CrashLogContent
@@ -26,9 +27,20 @@ data class CrashLogsUiState(
         get() = isLoading || isClearing || loadingLogId != null
 }
 
-class CrashLogsViewModel(private val repository: CrashLogsRepository) : ViewModel() {
+class CrashLogsViewModel(private val repository: CrashLogsRepository, private val savedStateHandle: SavedStateHandle = SavedStateHandle()) : ViewModel() {
     private val mutableState = MutableStateFlow(CrashLogsUiState())
     val state = mutableState.asStateFlow()
+    internal var scrollIndex: Int
+        get() = savedStateHandle["diagnostics.scrollIndex"] ?: 0
+        private set(value) { savedStateHandle["diagnostics.scrollIndex"] = value }
+    internal var scrollOffset: Double
+        get() = savedStateHandle["diagnostics.scrollOffset"] ?: 0.0
+        private set(value) { savedStateHandle["diagnostics.scrollOffset"] = value }
+    internal fun rememberScroll(index: Int, offset: Double) {
+        require(index >= 0 && index <= 100_000 && offset.isFinite() && offset >= 0 && offset <= 10_000_000)
+        scrollIndex = index; scrollOffset = offset
+    }
+
     private var listJob: Job? = null
     private var readJob: Job? = null
 
