@@ -188,6 +188,34 @@ void main() {
       }
     },
   );
+  testWidgets(
+    'same-row ACK during animated scroll does not cancel the active scroll',
+    (tester) async {
+      final bridge = FakeBridge();
+      await mount(tester, bridge);
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpAndSettle();
+      final list = tester.widget<ListView>(find.byType(ListView).first);
+      unawaited(
+        list.controller!.animateTo(
+          1000,
+          duration: const Duration(seconds: 1),
+          curve: Curves.linear,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+      final mid = list.controller!.offset;
+      expect(mid, greaterThan(0));
+      expect(list.controller!.position.isScrollingNotifier.value, isTrue);
+      // A prior native receipt arrives while the next DrivenScrollActivity runs.
+      bridge.emit();
+      await tester.pump();
+      expect(list.controller!.position.isScrollingNotifier.value, isTrue);
+      await tester.pumpAndSettle();
+      expect(list.controller!.offset, closeTo(1000, 0.1));
+    },
+  );
   testWidgets('blocked next response retires the old viewport save timer', (
     tester,
   ) async {

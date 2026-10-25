@@ -88,7 +88,11 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       );
       final anchor = old.rows[index]['id'];
       final updated = next.rows.indexWhere((row) => row['id'] == anchor);
-      if (updated >= 0) target = updated * extent + currentOffset % extent;
+      // A same-position ACK must preserve an active scroll. Even jumpTo(pixels)
+      // calls goIdle in ScrollPositionWithSingleContext and stops its animation.
+      if (updated >= 0 && updated != index) {
+        target = updated * extent + currentOffset % extent;
+      }
     }
     setState(() {
       state = next;
