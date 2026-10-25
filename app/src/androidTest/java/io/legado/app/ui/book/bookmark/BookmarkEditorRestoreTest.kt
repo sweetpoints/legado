@@ -122,7 +122,7 @@ class BookmarkEditorRestoreTest {
             parts += "marker=${nodeScalar(marker)},textEquals=${marker?.text?.toString() == expected},descriptionEquals=${marker?.contentDescription?.toString() == expected}"
             marker?.recycle()
             val field = actual(scenario, key) { it.isEditable }
-            parts += "editableDescendant=${nodeScalar(field)},actualEquals=${field?.text?.toString() == expected}"
+            parts += "editableDescendant=${nodeScalar(field)},actualRawEquals=${field?.text?.toString() == expected},actualNormalizedEquals=${field != null && field.text?.toString().orEmpty() == expected}"
             field?.recycle()
             last = parts.joinToString(";")
             diagnosticLog(last)
@@ -145,6 +145,12 @@ class BookmarkEditorRestoreTest {
         outside?.recycle()
         if (owned) return node
         node.recycle(); return null
+    }
+    private fun chapterText(scenario: ActivityScenario<AboutActivity>): String? {
+        val node = ownedNode(scenario, "chapter") ?: return null
+        // Fixed Flutter BaseRoleConfigurator maps ordinary Text to contentDescription;
+        // only editable fields map their value to AccessibilityNodeInfo.text.
+        return try { node.contentDescription?.toString() } finally { node.recycle() }
     }
     private fun until(deadline: Long, description: String, condition: () -> Boolean) {
         while (SystemClock.uptimeMillis() < deadline) {
@@ -291,15 +297,30 @@ class BookmarkEditorRestoreTest {
             }
             return ready
         }
-        until(deadline, "Owned focused editable field and real native input connection") {
-            probe.sample("readiness")
-            val field = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
-            val ready = field != null && connectionReady(); field?.recycle(); ready
+        var field: android.view.accessibility.AccessibilityNodeInfo? = null
+        while (field == null && SystemClock.uptimeMillis() < deadline) {
+            until(deadline, "Owned focused editable field and real native input connection") {
+                probe.sample("readiness")
+                val candidate = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
+                if (candidate == null) {
+                    // A focus acquired in the old viewport can move offscreen when the
+                    // actual IME fits the native window. Reveal it using real scrolling;
+                    // do not repeat the already dispatched focus click or text action.
+                    val visible = ownedNode(scenario, key)
+                    if (visible == null && SystemClock.uptimeMillis() < deadline) reveal(scenario, key, deadline)
+                    visible?.recycle()
+                    false
+                } else {
+                    val ready = connectionReady(); candidate.recycle(); ready
+                }
+            }
+            frame(scenario, deadline, requireInputConnection = true)
+            probe.sample("afterNaturalTurns", force = true)
+            // The natural platform boundary may replace or hide the AX node. Return
+            // to the same deadline/visibility observation rather than reusing it.
+            val fresh = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
+            if (fresh != null && connectionReady()) field = fresh else fresh?.recycle()
         }
-        frame(scenario, deadline, requireInputConnection = true)
-        probe.sample("afterNaturalTurns", force = true)
-        // A platform frame can replace its AX node. Re-read after that boundary.
-        val field = actual(scenario, key) { it.isFocused && it.isEditable && it.actionList.any { a -> a.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT } }
         assertNotNull("Fresh input target remains owned and ready", field)
         assertTrue("Input connection remains active before the single text action", connectionReady())
         try { assertTrue(field!!.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
@@ -311,7 +332,7 @@ class BookmarkEditorRestoreTest {
             scenario.onActivity { host -> val state = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).model.state.value
                 same = (if (key == "text") state.bookText else state.content) == text }
             val node = actual(scenario, key) { it.isEditable }
-            val actual = node?.let { try { it.text?.toString() == text } finally { it.recycle() } } ?: false
+            val actual = node?.let { try { it.text?.toString().orEmpty() == text } finally { it.recycle() } } ?: false
             same && actual
         }
         } catch (failure: AssertionError) {
@@ -375,7 +396,7 @@ class BookmarkEditorRestoreTest {
             driver.await("actual restored note and raw selection") {
                 driver.node("bookmark-editor-content")?.let { try { it.text?.toString() == "Draft note" && it.isFocused && it.textSelectionStart == 5 && it.textSelectionEnd == 2 } finally { it.recycle() } } ?: false
             }
-            assertEquals("Chapter", driver.text("bookmark-editor-chapter"))
+            assertEquals("Chapter", chapterText(scenario))
             reveal(scenario, "text"); assertEquals("Draft text", driver.text("bookmark-editor-text"))
             scenario.onActivity { activity ->
                 val dialog =
@@ -519,7 +540,7 @@ class BookmarkEditorRestoreTest {
             try {
                 driver.await("actual original ticket chapter") {
                     probe.sample("chapterReceipt")
-                    driver.text("bookmark-editor-chapter") == bookmark.chapterName
+                    chapterText(scenario) == bookmark.chapterName
                 }
             } catch (failure: AssertionError) { probe.fail(failure); throw failure }
             click(scenario, "confirm"); await(scenario, true)
