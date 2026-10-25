@@ -323,6 +323,8 @@ class SourceDragOrderUiTest {
                     // Distinguish a rejected/stale query from native order and viewport failures.
                     // This is the original predicate and 30s wait: no input or draw is repeated.
                     val receipts = arrayListOf<String>()
+                    var passed = false
+                    var phaseFailure: Throwable? = null
                     try {
                         waitUntil("book filtered rows after restoring group") {
                             var nativeMatches = false
@@ -362,15 +364,24 @@ class SourceDragOrderUiTest {
                             }
                             nativeMatches && renderedMatches
                         }
-                    } catch (failure: AssertionError) {
-                        val output = File(context.getExternalFilesDir(null), "ui-regression/book-filter-restore-receipt.txt")
-                        runCatching {
-                            output.parentFile!!.mkdirs()
-                            output.writeText(receipts.joinToString("\n"))
-                            screenshot("book-filter-restore-failure")
-                        }.onFailure(failure::addSuppressed)
+                        passed = true
+                    } catch (failure: Throwable) {
+                        phaseFailure = failure
+                        runCatching { screenshot("book-filter-restore-failure") }
+                            .onFailure(failure::addSuppressed)
                         failure.addSuppressed(AssertionError(receipts.lastOrNull() ?: "no filter receipt"))
                         throw failure
+                    } finally {
+                        runCatching {
+                            val output = File(context.getExternalFilesDir(null), "ui-regression/book-filter-restore-receipt.txt")
+                            output.parentFile!!.mkdirs()
+                            output.writeText("outcome=${if (passed) "pass" else "failure"},pass=$passed\n" +
+                                receipts.joinToString("\n"))
+                        }.onFailure { diagnosticFailure ->
+                            phaseFailure?.addSuppressed(diagnosticFailure) ?: android.util.Log.w(
+                                "SourceDragOrderUiTest", "Unable to archive filter restore receipt", diagnosticFailure,
+                            )
+                        }
                     }
                 } else {
                     waitRows(expectedVisible)
