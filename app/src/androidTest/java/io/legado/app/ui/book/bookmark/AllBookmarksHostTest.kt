@@ -124,17 +124,32 @@ class AllBookmarksHostTest {
     @Test
     fun normalFlutterEntryReflectsLiveRoomUpdateAndRecreateWithoutWritingBookmark() {
         val latest = original.copy(chapterName = "Updated chapter", content = "Fresh Room note")
+        val projection = io.legado.app.data.repository.AllBookmarksRow(latest.time, latest.bookName,
+            latest.bookAuthor, latest.chapterName, latest.bookText, latest.content)
         runBlocking(Dispatchers.IO) { appDb.bookmarkDao.update(latest) }
-        actual.driver.await("Actual bookmark row reflects Room update") {
-            actual.driver.text("all-bookmarks-content-${original.time}") == "Fresh Room note"
+        var nativeAck = false
+        var phase = "live-room-content"
+        fun nativeProjectionReady(): Boolean {
+            scenario.onActivity { nativeAck = it.model.state.value.rows.singleOrNull { row -> row.id == original.time } == projection }
+            return nativeAck
         }
-        scenario.recreate()
-        actual.ready()
-        actual.reveal("all-bookmarks-row-${original.time}")
-        actual.driver.await("Recreated actual bookmark chapter") {
-            actual.driver.text("all-bookmarks-chapter-${original.time}") == "Updated chapter"
+        try {
+            actual.driver.await("Actual bookmark row reflects Room update") {
+                nativeProjectionReady() && actual.plainLabel("all-bookmarks-content-${original.time}") == "Fresh Room note"
+            }
+            scenario.recreate()
+            actual.ready()
+            actual.reveal("all-bookmarks-row-${original.time}")
+            phase = "recreated-chapter"
+            actual.driver.await("Recreated actual bookmark chapter") {
+                nativeProjectionReady() && actual.plainLabel("all-bookmarks-chapter-${original.time}") == "Updated chapter"
+            }
+            assertEquals(latest, runBlocking(Dispatchers.IO) { appDb.bookmarkDao.all.single { it.time == original.time } })
+        } catch (failure: Throwable) {
+            runCatching { android.util.Log.e("AllBookmarksLabel", "phase=$phase nativeProjectionAck=$nativeAck ${actual.plainLabelObservation}") }
+                .onFailure { failure.addSuppressed(it) }
+            throw failure
         }
-        assertEquals(latest, runBlocking(Dispatchers.IO) { appDb.bookmarkDao.all.single { it.time == original.time } })
     }
 
     @Test
@@ -199,25 +214,103 @@ class AllBookmarksHostTest {
         instrumentation.addMonitor(monitor)
         try {
             actual.click("all-bookmarks-menu"); actual.click("all-bookmarks-export-json")
-            compose.waitUntil(timeoutMillis = 20_000) {
-                compose.onAllNodesWithTag("handle-file-dialog").fetchSemanticsNodes().isNotEmpty()
+            val readyDeadline = android.os.SystemClock.uptimeMillis() + 20_000
+            var readiness = "not observed"
+            var readyPhase = "native-dialog-ready"
+            fun readyDialog(): android.view.View? {
+                val nodes = compose.onAllNodesWithTag("handle-file-dialog").fetchSemanticsNodes()
+                val node = nodes.singleOrNull() ?: run { readiness = "dialogNodes=${nodes.size}"; return null }
+                val root = node.root as? androidx.compose.ui.platform.ViewRootForTest
+                    ?: run { readiness = "viewRoot=false"; return null }
+                val cancel = compose.onAllNodes(hasText(root.view.context.getString(io.legado.app.R.string.cancel)) and hasClickAction())
+                    .fetchSemanticsNodes().any {
+                        it.root === node.root && !it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
+                    }
+                var result: android.view.View? = null
+                instrumentation.runOnMainSync {
+                    var owner: android.content.Context = root.view.context
+                    var contexts = 0
+                    while (owner is android.content.ContextWrapper && owner !is io.legado.app.ui.file.HandleFileActivity && contexts++ < 8)
+                        owner = owner.baseContext
+                    val picker = owner as? io.legado.app.ui.file.HandleFileActivity
+                    var parent: android.view.View? = root.view
+                    var window: android.view.Window? = null
+                    var parents = 0
+                    while (parent != null && parents++ < 32) {
+                        if (parent is androidx.compose.ui.window.DialogWindowProvider) { window = parent.window; break }
+                        parent = parent.parent as? android.view.View
+                    }
+                    val decor = window?.decorView
+                    val state = picker?.choicesModel?.state?.value
+                    val resumed = picker?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED
+                    val hostReady = picker != null && !picker.isFinishing && !picker.isDestroyed && !picker.supportFragmentManager.isStateSaved
+                    val ownerReady = root.isLifecycleInResumedState && !root.hasPendingMeasureOrLayout
+                    val ready = resumed && hostReady && state?.loaded == true && !state.busy && state.phase == "Choices" &&
+                        !state.finished && !state.requiresRetry && state.error == null && state.issue == null &&
+                        ownerReady && cancel && decor != null && root.view.rootView === decor &&
+                        decor.isAttachedToWindow && decor.isLaidOut && decor.isShown && decor.hasWindowFocus()
+                    readiness = "picker=${picker != null} resumed=$resumed hostReady=$hostReady loaded=${state?.loaded} busy=${state?.busy} " +
+                        "choices=${state?.phase == "Choices"} finished=${state?.finished} retry=${state?.requiresRetry} " +
+                        "error=${state?.error != null} issue=${state?.issue != null} ownerReady=$ownerReady cancelEnabled=$cancel " +
+                        "dialogWindow=${decor != null} attached=${decor?.isAttachedToWindow} laidOut=${decor?.isLaidOut} " +
+                        "shown=${decor?.isShown} dialogFocused=${decor?.hasWindowFocus()} activityFocused=${picker?.window?.decorView?.hasWindowFocus()}"
+                    if (ready) result = decor
+                }
+                return result
             }
-            assertEquals(1, launches.get())
-            // Real Back from the currently visible native choices dialog, not a synthetic result.
-            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
-            actual.ready()
-            actual.driver.await("Native directory cancel consumes ticket without starting export") {
-                var settled = false
-                scenario.onActivity { settled = it.model.waitingDirectory() == null && !it.model.state.value.exporting && it.model.state.value.effect == null }
-                settled
+            fun withinReady(description: String, condition: () -> Boolean) {
+                val remaining = readyDeadline - android.os.SystemClock.uptimeMillis()
+                check(remaining > 0) { "Original native choices readiness deadline expired" }
+                try { compose.waitUntil(timeoutMillis = remaining, condition = condition) }
+                catch (_: androidx.compose.ui.test.ComposeTimeoutException) { error("Timed out waiting for $description") }
             }
-            scenario.recreate(); actual.ready()
-            scenario.onActivity {
-                assertNull(it.model.waitingDirectory()); assertNull(it.model.state.value.effect)
-                assertFalse(it.model.state.value.exporting)
+            try {
+                var decor: android.view.View? = null
+                withinReady("resumed loaded interactive owned native directory dialog") {
+                    decor = readyDialog(); decor != null
+                }
+                readyPhase = "native-dialog-natural-frame"
+                val observed = checkNotNull(decor)
+                val frames = java.util.concurrent.CountDownLatch(1)
+                instrumentation.runOnMainSync {
+                    observed.postOnAnimation { observed.postOnAnimation { frames.countDown() } }
+                }
+                check(frames.await((readyDeadline - android.os.SystemClock.uptimeMillis()).coerceAtLeast(0), java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    "Native dialog natural frames exceeded original readiness budget"
+                }
+                readyPhase = "native-dialog-fresh-before-back"
+                withinReady("fresh interactive native directory dialog after natural frames") { readyDialog() === observed }
+                assertEquals(1, launches.get())
+                // One real Back only after the actual floating dialog is interactive.
+                instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                readyPhase = "parent-after-single-back"
+                actual.ready()
+                actual.driver.await("Native directory cancel consumes ticket without starting export") {
+                    var settled = false
+                    scenario.onActivity { settled = it.model.waitingDirectory() == null && !it.model.state.value.exporting && it.model.state.value.effect == null }
+                    settled
+                }
+                scenario.recreate(); actual.ready()
+                scenario.onActivity {
+                    assertNull(it.model.waitingDirectory()); assertNull(it.model.state.value.effect)
+                    assertFalse(it.model.state.value.exporting)
+                }
+                assertEquals(1, launches.get())
+                assertEquals(original, runBlocking(Dispatchers.IO) { appDb.bookmarkDao.all.single { it.time == original.time } })
+            } catch (failure: Throwable) {
+                runCatching {
+                    var caller = "callerMissing=true"
+                    scenario.onActivity {
+                        caller = "callerResumed=${it.lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED} " +
+                            "exporting=${it.model.state.value.exporting} effect=${it.model.state.value.effect != null} directoryTicket=${it.model.waitingDirectory() != null}"
+                    }
+                    val active = instrumentation.uiAutomation.rootInActiveWindow
+                    val window = try { "activeWindow=${active?.windowId} activePackageMatches=${active?.packageName == context.packageName}" }
+                        finally { active?.recycle() }
+                    android.util.Log.e("AllBookmarksPicker", "phase=$readyPhase lastReady=[$readiness] $caller $window")
+                }.onFailure { failure.addSuppressed(it) }
+                throw failure
             }
-            assertEquals(1, launches.get())
-            assertEquals(original, runBlocking(Dispatchers.IO) { appDb.bookmarkDao.all.single { it.time == original.time } })
         } finally { instrumentation.removeMonitor(monitor) }
     }
 

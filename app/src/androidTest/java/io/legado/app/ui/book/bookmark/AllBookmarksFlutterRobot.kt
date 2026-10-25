@@ -30,6 +30,32 @@ internal class AllBookmarksFlutterRobot : AutoCloseable {
         }
         requireNotNull(action).let { try { assertTrue(it.performAction(AccessibilityNodeInfo.ACTION_CLICK)) } finally { it.recycle() } }
     }
+    var plainLabelObservation: String = "not observed"
+        private set
+    fun plainLabel(id: String): String? {
+        val pending = ArrayDeque<AccessibilityNodeInfo>()
+        driver.node(id)?.let(pending::add) ?: run {
+            plainLabelObservation = "found=false"; return null
+        }
+        val labels = linkedSetOf<String>()
+        var visited = 0
+        while (pending.isNotEmpty()) {
+            val node = pending.removeFirst()
+            try {
+                visited++
+                // Flutter 3.47.6 BaseRoleConfigurator maps non-editable Text to
+                // contentDescription; keep scope to this identifier and descendants.
+                if (node.isVisibleToUser && !node.isEditable) {
+                    node.text?.toString()?.takeIf { it.isNotEmpty() }?.let(labels::add)
+                    node.contentDescription?.toString()?.takeIf { it.isNotEmpty() }?.let(labels::add)
+                }
+                for (index in 0 until node.childCount) node.getChild(index)?.let(pending::add)
+            } finally { node.recycle() }
+        }
+        plainLabelObservation = "found=true nodes=$visited distinctLabels=${labels.size} lengths=${labels.take(8).map { it.length }}"
+        // Never concatenate unrelated labels or weaken a full-value assertion.
+        return labels.singleOrNull()
+    }
     fun reveal(id: String) {
         repeat(60) {
             driver.node(id)?.let { it.recycle(); return }
