@@ -1,0 +1,7 @@
+{
+  "allBookmarksTitle": "全部书签",
+  "allBookmarksExportJson": "导出 JSON",
+  "allBookmarksExportMarkdown": "导出 Markdown",
+  "allBookmarksRetry": "重试",
+  "allBookmarksError": "书签加载失败，请重试。"
+}

@@ -1,0 +1,7 @@
+{
+  "allBookmarksTitle": "All bookmarks",
+  "allBookmarksExportJson": "Export JSON",
+  "allBookmarksExportMarkdown": "Export Markdown",
+  "allBookmarksRetry": "Retry",
+  "allBookmarksError": "Unable to load bookmarks. Try again."
+}
