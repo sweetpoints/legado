@@ -303,44 +303,52 @@ class _EditorState extends State<BookmarkEditorPage> {
                                 ),
                                 Padding(
                                   padding: const EdgeInsets.all(8),
-                                  child: Row(
-                                    children: [
-                                      if (s?.raw['canDelete'] == true)
+                                  child: SizedBox(
+                                    width: double.infinity,
+                                    child: Wrap(
+                                      alignment: WrapAlignment.spaceBetween,
+                                      spacing: 8,
+                                      children: [
+                                        if (s?.raw['canDelete'] == true)
+                                          tagged(
+                                            'delete',
+                                            TextButton(
+                                              onPressed: mutation
+                                                  ? () => unawaited(
+                                                      command('delete'),
+                                                    )
+                                                  : null,
+                                              child: Text(
+                                                l.bookmarkEditorDelete,
+                                              ),
+                                            ),
+                                          ),
                                         tagged(
-                                          'delete',
+                                          'cancel',
+                                          TextButton(
+                                            onPressed: s?.saving == true
+                                                ? null
+                                                : () => unawaited(
+                                                    command('cancel'),
+                                                  ),
+                                            child: Text(l.bookmarkEditorCancel),
+                                          ),
+                                        ),
+                                        tagged(
+                                          'confirm',
                                           TextButton(
                                             onPressed: mutation
                                                 ? () => unawaited(
-                                                    command('delete'),
+                                                    command('confirm'),
                                                   )
                                                 : null,
-                                            child: Text(l.bookmarkEditorDelete),
+                                            child: Text(
+                                              l.bookmarkEditorConfirm,
+                                            ),
                                           ),
                                         ),
-                                      const Spacer(),
-                                      tagged(
-                                        'cancel',
-                                        TextButton(
-                                          onPressed: s?.saving == true
-                                              ? null
-                                              : () => unawaited(
-                                                  command('cancel'),
-                                                ),
-                                          child: Text(l.bookmarkEditorCancel),
-                                        ),
-                                      ),
-                                      tagged(
-                                        'confirm',
-                                        TextButton(
-                                          onPressed: mutation
-                                              ? () => unawaited(
-                                                  command('confirm'),
-                                                )
-                                              : null,
-                                          child: Text(l.bookmarkEditorConfirm),
-                                        ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
