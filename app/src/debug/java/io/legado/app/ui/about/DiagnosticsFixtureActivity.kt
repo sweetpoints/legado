@@ -25,12 +25,13 @@ class DiagnosticsFixtureActivity : BaseThemedActivity(), DiagnosticsRepositoryOw
     }
     override fun appLogsRepository(): AppLogsRepository = fixture.app
     override fun crashLogsRepository(): CrashLogsRepository = fixture.crash
-    override fun startActivity(intent: Intent) {
+    @Suppress("DEPRECATION")
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
         if(intent.action == Intent.ACTION_CHOOSER) {
             if(fixture.rejectShare) throw IllegalStateException("Synthetic share failure")
             fixture.choosers += Intent(intent)
-            if(fixture.launchRealChooser) super.startActivity(intent)
-        } else super.startActivity(intent)
+            if(fixture.launchRealChooser) super.startActivityForResult(intent, requestCode, options)
+        } else super.startActivityForResult(intent, requestCode, options)
     }
 }
 class DiagnosticsFixtureModel : ViewModel() {

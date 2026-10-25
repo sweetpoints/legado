@@ -236,23 +236,63 @@ class FlutterDiagnosticsUiTest {
                 click(driver, "app-logs-next")
                 driver.await("actual second page") { exactText(driver, "app-logs-list", "Synthetic boundary row 100") }
                 var awaitingIndex = -1
-                driver.await("actual viewport near the page tail") {
-                    var index = 0
-                    scenario.onActivity { host -> index = (host.supportFragmentManager.findFragmentByTag("logs") as AppLogDialog).model.scrollIndex }
-                    if(index >= 94 && exactText(driver, "app-logs-list", "Synthetic boundary row ${100 + index}")) return@await true
-                    if(awaitingIndex >= 0 && index <= awaitingIndex) return@await false
-                    val nodes = java.util.ArrayDeque<AccessibilityNodeInfo>()
-                    driver.node("app-logs-list")?.let(nodes::add) ?: return@await false
-                    var sent = false
-                    while(nodes.isNotEmpty()) {
-                        val node = nodes.removeFirst()
-                        if(!sent && node.isVisibleToUser && node.isEnabled && node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD })
-                            sent = node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-                        for(child in 0 until node.childCount) node.getChild(child)?.let(nodes::add)
-                        node.recycle()
+                var dispatches = 0
+                var lastDispatchResult = false
+                var nativeScalars = "not sampled"
+                var listFound = false
+                var listScalars = "not sampled"
+                var actionScalars = "no action dispatched"
+                var visibleFixtureIndices = emptyList<Int>()
+                val fixtureLabel = Regex("^Synthetic boundary row ([0-9]+)$")
+                fun nodeScalars(node: AccessibilityNodeInfo): String {
+                    val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+                    return "visible=${node.isVisibleToUser},enabled=${node.isEnabled},scrollable=${node.isScrollable}," +
+                        "window=${node.windowId},bounds=$bounds,actions=${node.actionList.take(16).map { it.id }}"
+                }
+                try {
+                    driver.await("actual viewport near the page tail") {
+                        var index = 0
+                        scenario.onActivity { host ->
+                            val dialog = host.supportFragmentManager.findFragmentByTag("logs") as AppLogDialog
+                            val model = dialog.model
+                            val state = model.state.value
+                            index = model.scrollIndex
+                            nativeScalars = "page=${dialog.page},index=$index,offset=${model.scrollOffset}," +
+                                "anchorPresent=${model.scrollAnchor != null},listEstablished=${state.listEstablished}," +
+                                "loading=${state.isLoading},working=${state.isWorking},busy=${state.isBusy},errorPresent=${state.error != null}"
+                        }
+                        if(index >= 94 && exactText(driver, "app-logs-list", "Synthetic boundary row ${100 + index}")) return@await true
+                        if(awaitingIndex >= 0 && index <= awaitingIndex) return@await false
+                        val nodes = java.util.ArrayDeque<AccessibilityNodeInfo>()
+                        val list = driver.node("app-logs-list")
+                        listFound = list != null
+                        list?.let { listScalars = nodeScalars(it); nodes.add(it) } ?: return@await false
+                        val visible = linkedSetOf<Int>()
+                        var sent = false
+                        while(nodes.isNotEmpty()) {
+                            val node = nodes.removeFirst()
+                            if (node.isVisibleToUser) {
+                                val value = node.text?.toString() ?: node.contentDescription?.toString().orEmpty()
+                                fixtureLabel.matchEntire(value)?.groupValues?.get(1)?.toIntOrNull()?.let(visible::add)
+                            }
+                            if(!sent && node.isVisibleToUser && node.isEnabled && node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD }) {
+                                actionScalars = nodeScalars(node)
+                                dispatches++
+                                sent = node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                                lastDispatchResult = sent
+                            }
+                            for(child in 0 until node.childCount) node.getChild(child)?.let(nodes::add)
+                            node.recycle()
+                        }
+                        visibleFixtureIndices = visible.take(8)
+                        if(sent) awaitingIndex = index
+                        false
                     }
-                    if(sent) awaitingIndex = index
-                    false
+                } catch (failure: AssertionError) {
+                    throw AssertionError("${failure.message}; awaitingIndex=$awaitingIndex,dispatches=$dispatches," +
+                        "lastDispatchResult=$lastDispatchResult,listFound=$listFound,native=[$nativeScalars]," +
+                        "list=[$listScalars],action=[$actionScalars],lastVisibleFixtureIndices=$visibleFixtureIndices")
+                        .also { it.initCause(failure) }
                 }
                 var anchorIndex = 0; var offset = 0.0
                 scenario.onActivity { host ->
