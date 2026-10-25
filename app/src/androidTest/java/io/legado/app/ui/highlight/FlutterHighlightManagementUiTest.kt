@@ -218,7 +218,40 @@ class FlutterHighlightManagementUiTest {
                 ui.await15("raw group native ACK") {
                     var raw = false; scenario.onActivity { host -> raw = host.supportFragmentManager.fragments.filterIsInstance<HighlightGroupManageDialog>().single().model.state.value.name == "  Private😀\nDraft  " }; raw
                 }
-                scenario.recreate(); ui.await15("actual recreated private raw draft") { ui.text("highlight-group-name") == "  Private😀\nDraft  " }
+                scenario.recreate()
+                var restoredReceipt = "not sampled"
+                ui.await15("actual recreated private raw draft", { restoredReceipt }) {
+                    var native = false
+                    var windowId = -1
+                    scenario.onActivity { host ->
+                        val dialog = host.supportFragmentManager.fragments.filterIsInstance<HighlightGroupManageDialog>().singleOrNull()
+                        val state = dialog?.model?.state?.value
+                        native = state?.name == "  Private😀\nDraft  "
+                        restoredReceipt = "nativeFound=${state != null},nativeEquals=$native,nativeLength=${state?.name?.length}," +
+                            "loading=${state?.loading},busy=${state?.busy},rename=${state?.stage == HighlightGroupStage.Rename}"
+                        dialog?.dialog?.window?.decorView?.createAccessibilityNodeInfo()?.let { node ->
+                            try { windowId = node.windowId } finally { node.recycle() }
+                        }
+                    }
+                    // InputDecoration's label is not the restored editable value. Read
+                    // only the owned TextField descendant, without clicking or refocusing.
+                    val nodes = java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+                    driver.node("highlight-group-name")?.let(nodes::add)
+                    var actual = false
+                    var visited = 0
+                    while (nodes.isNotEmpty()) {
+                        val node = nodes.removeFirst()
+                        if (visited++ < 8) restoredReceipt += ";nodeWindowMatches=${node.windowId == windowId}," +
+                            "visible=${node.isVisibleToUser},enabled=${node.isEnabled},editable=${node.isEditable}," +
+                            "focused=${node.isFocused},textLength=${node.text?.length}," +
+                            "rawEquals=${node.text?.toString() == "  Private😀\nDraft  "}"
+                        if (node.windowId == windowId && node.isVisibleToUser && node.isEnabled && node.isEditable &&
+                            node.text?.toString() == "  Private😀\nDraft  ") actual = true
+                        for (index in 0 until node.childCount) node.getChild(index)?.let(nodes::add)
+                        node.recycle()
+                    }
+                    native && actual
+                }
                 ui.click("highlight-group-cancel"); ui.await15("rename canceled") { !ui.exists("highlight-group-name") }
                 assertEquals(GSON.toJson(first), GSON.toJson(database { dao.all.single { it.uuid == first.uuid } }))
                 ui.click("highlight-group-edit-Flutter A"); inputGroupName("  Renamed  "); ui.click("highlight-group-rename-confirm")
