@@ -122,9 +122,57 @@ class ReadingLayoutTransitionTest {
                     }
                     awaitReader(scenario, book.bookUrl, false)
                     val initial = capture(scenario, "layout-cover-before")
-                    switchStyle(scenario, 1)
-                    awaitReader(scenario, book.bookUrl, true)
-                    val enteredScroll = capture(scenario, "layout-scroll-before-swipe")
+                    // Observe this failing transition without forcing layout, replacing callbacks,
+                    // or waiting for the expected paragraph. All existing readiness/assertions stay.
+                    val geometryTrace = arrayListOf<String>()
+                    var droppedSamples = 0
+                    val geometryStart = android.os.SystemClock.uptimeMillis()
+                    val geometryWallStart = System.currentTimeMillis()
+                    val offsetField = ContentTextView::class.java.getDeclaredField("pageOffset").apply { isAccessible = true }
+                    val pendingSizeField = ChapterProvider::class.java.getDeclaredField("upViewSizeRunnable").apply { isAccessible = true }
+                    lateinit var observedView: ReadView
+                    lateinit var observer: android.view.ViewTreeObserver.OnPreDrawListener
+                    scenario.onActivity { activity ->
+                        observedView = activity.findViewById(R.id.read_view)
+                        observer = android.view.ViewTreeObserver.OnPreDrawListener {
+                            val sample = runCatching {
+                                val view = observedView.curPage.findViewById<ContentTextView>(R.id.content_text_view)
+                                val page = observedView.curPage.textPage
+                                val visible = observedView.getReadPosition()?.second
+                                val saved = ReadBook.durChapterPos
+                                val targetLine = page.lines.lastOrNull { it.chapterPosition <= saved }
+                                "scroll=${observedView.isScroll} offset=${offsetField.getInt(view)} " +
+                                    "readView=${observedView.width}x${observedView.height} contentBounds=${view.left},${view.top},${view.right},${view.bottom} " +
+                                    "content=${view.width}x${view.height} provider=${ChapterProvider.viewWidth}x${ChapterProvider.viewHeight} " +
+                                    "providerPadding=${ChapterProvider.paddingTop},${ChapterProvider.paddingBottom} style=${ReadBookConfig.styleSelect} " +
+                                    "pendingSize=${pendingSizeField.get(ChapterProvider) != null} running=${observedView.pageDelegate?.isRunning} " +
+                                    "pageChapter=${System.identityHashCode(page.textChapter)} currentChapter=${System.identityHashCode(ReadBook.curTextChapter)} " +
+                                    "bound=${page.textChapter === ReadBook.curTextChapter} completed=${ReadBook.curTextChapter?.isCompleted} " +
+                                    "page=${page.index} pageHeight=${page.height} saved=$saved " +
+                                    "visible=${visible?.chapterPosition} pageStart=${page.lines.firstOrNull()?.chapterPosition} " +
+                                    "targetPosition=${targetLine?.chapterPosition} targetTop=${targetLine?.lineTop} targetBottom=${targetLine?.lineBottom} " +
+                                    "version=${observedView.getReadPositionVersion()} bottomDialog=${activity.bottomDialog}"
+                            }.getOrElse { "sampleFailure=${it.javaClass.simpleName}" }
+                            if (geometryTrace.lastOrNull()?.substringAfter(' ') != sample) {
+                                if (geometryTrace.size < 24) geometryTrace += "${android.os.SystemClock.uptimeMillis() - geometryStart} $sample"
+                                else droppedSamples++
+                            }
+                            true
+                        }
+                        observedView.viewTreeObserver.addOnPreDrawListener(observer)
+                    }
+                    lateinit var enteredScroll: ReadingSnapshot
+                    try {
+                        switchStyle(scenario, 1)
+                        awaitReader(scenario, book.bookUrl, true)
+                        enteredScroll = capture(scenario, "layout-scroll-before-swipe")
+                    } finally {
+                        scenario.onActivity { observedView.viewTreeObserver.removeOnPreDrawListener(observer) }
+                        val trace = File(context.getExternalFilesDir("ui-regression"), "layout-transition-restore-geometry.txt")
+                        trace.parentFile?.mkdirs()
+                        trace.writeText("startUptimeMs=$geometryStart startWallTimeMs=$geometryWallStart\n" +
+                            geometryTrace.joinToString("\n") + "\ndroppedSamples=$droppedSamples\n")
+                    }
                     assertNotNull(
                         "The original page must identify an actual source paragraph",
                         initial.visiblePosition,
