@@ -1,0 +1,9 @@
+{
+  "bookmarkEditorTitle": "书签",
+  "bookmarkEditorText": "正文",
+  "bookmarkEditorContent": "笔记",
+  "bookmarkEditorDelete": "删除",
+  "bookmarkEditorCancel": "取消",
+  "bookmarkEditorConfirm": "确定",
+  "bookmarkEditorBridgeError": "书签编辑器暂不可用，请重试。"
+}

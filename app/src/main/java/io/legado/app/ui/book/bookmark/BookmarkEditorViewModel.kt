@@ -22,6 +22,7 @@ data class BookmarkEditorState(
     val busy: Boolean = false,
     val error: String? = null,
     val finished: Boolean = false,
+    val focused: String = "text",
 ) {
     val canEdit
         get() = loaded && !loading && !busy && !finished
@@ -38,6 +39,7 @@ class BookmarkEditorViewModel(
         MutableStateFlow(
             BookmarkEditorState(
                 finished = saved.get<Boolean>("bookmark.finished") == true,
+                focused = saved.get<String>("bookmark.focus")?.takeIf { it in setOf("text", "content") } ?: "text",
                 loading = saved.get<Boolean>("bookmark.finished") != true,
             )
         )
@@ -96,12 +98,20 @@ class BookmarkEditorViewModel(
         }
     }
 
+    fun focus(key: String) {
+        require(key in setOf("text", "content"))
+        if (!state.value.canEdit) return
+        saved["bookmark.focus"] = key
+        mutable.value = state.value.copy(focused = key)
+    }
+
     fun bookText(value: String, start: Int, end: Int) = edit(true, value, start, end)
 
     fun content(value: String, start: Int, end: Int) = edit(false, value, start, end)
 
     private fun edit(text: Boolean, value: String, start: Int, end: Int) {
         if (!state.value.canEdit) return
+        focus(if (text) "text" else "content")
         val first = start.coerceIn(0, value.length)
         val last = end.coerceIn(0, value.length)
         if (text) {
