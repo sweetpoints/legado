@@ -417,4 +417,58 @@ void main() {
       expect(t.takeException(), isNull);
     },
   );
+  testWidgets(
+    'narrow bookmark actions wrap at two times text scale without hiding delete cancel or confirm',
+    (t) async {
+      t.view.devicePixelRatio = 1;
+      t.view.physicalSize = const Size(320, 720);
+      addTearDown(t.view.resetDevicePixelRatio);
+      addTearDown(t.view.resetPhysicalSize);
+      await t.pumpWidget(
+        MaterialApp(
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: const BookmarkEditorPage(),
+        ),
+      );
+      await t.pump();
+      await t.pumpAndSettle();
+      final errors = <Object>[];
+      Object? error;
+      while ((error = t.takeException()) != null) {
+        errors.add(error!);
+      }
+      expect(
+        errors,
+        isEmpty,
+        reason: 'Actions must retain the original FlowRow wrapping contract',
+      );
+      for (final id in ['delete', 'cancel', 'confirm']) {
+        final finder = find.bySemanticsIdentifier('bookmark-editor-$id');
+        expect(finder.hitTestable(), findsOneWidget);
+        final rect = t.getRect(finder);
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(320));
+        expect(rect.top, greaterThanOrEqualTo(0));
+        expect(rect.bottom, lessThanOrEqualTo(720));
+        expect(
+          t
+              .widget<TextButton>(
+                find.descendant(of: finder, matching: find.byType(TextButton)),
+              )
+              .onPressed,
+          isNotNull,
+        );
+      }
+      expect(calls.where((call) => call['op'] != 'focus'), isEmpty);
+    },
+  );
 }
