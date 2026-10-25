@@ -131,8 +131,7 @@ class EmbeddedFlutterActivityTest {
         }
         awaitChecked("enabled:${source.bookSourceUrl}", false)
 
-        clickIdentifier("source-manager-menu")
-        clickIdentifier("source-manager-action:online")
+        openOnlineAfterManagerMutation(first)
         dismissManagerDialogWithBack(first)
         assertSame(first, awaitManager())
         awaitChecked("select:${source.bookSourceUrl}", true)
@@ -345,6 +344,88 @@ class EmbeddedFlutterActivityTest {
             SystemClock.sleep(100)
         }
         fail(message)
+    }
+
+    /** Opening a popup captures its enabled items: wait for both native and rendered idle. */
+    @Suppress("DEPRECATION")
+    private fun openOnlineAfterManagerMutation(activity: BookSourceActivity) {
+        val deadline = SystemClock.elapsedRealtime() + 30_000
+        var diagnostic = "manager not sampled"
+        fun nativeIdle(): Boolean {
+            var ready = false
+            instrumentation.runOnMainSync {
+                val state = activity.managerModel.state.value
+                val owner = ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(Stage.RESUMED).any { it === activity }
+                val focused = activity.window.decorView.hasWindowFocus()
+                diagnostic = "owner=$owner, focused=$focused, loading=${state.loading}, " +
+                    "busy=${state.busy}, dialog=${state.dialog}"
+                ready = owner && focused && !state.loading && !state.busy && state.dialog == null
+            }
+            return ready
+        }
+        fun awaitPhase(message: String, condition: () -> Boolean) {
+            while (SystemClock.elapsedRealtime() < deadline) {
+                if (condition()) return
+                SystemClock.sleep(25)
+            }
+            fail("$message; $diagnostic")
+        }
+        // Stay within the identified control; never dispatch to a clickable ancestor/overlay.
+        fun ownedAction(identifier: String): AccessibilityNodeInfo? {
+            val initial = renderedNode(identifier = identifier) ?: return null
+            val pending = ArrayDeque<AccessibilityNodeInfo>()
+            pending.add(initial)
+            while (pending.isNotEmpty()) {
+                val node = pending.removeFirst()
+                val advertised = node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
+                if (node.isVisibleToUser && node.isEnabled && node.isClickable && advertised) {
+                    pending.forEach { it.recycle() }
+                    return node
+                }
+                for (index in 0 until node.childCount) node.getChild(index)?.let(pending::add)
+                node.recycle()
+            }
+            return null
+        }
+        awaitPhase("Manager mutation did not reach native and rendered idle before opening menu") {
+            if (!nativeIdle()) return@awaitPhase false
+            val switch = renderedNode(identifier = "enabled:${source.bookSourceUrl}")
+                ?: return@awaitPhase false
+            val idle = switch.isCheckable && !switch.isChecked && switch.isEnabled
+            switch.recycle()
+            val action = ownedAction("enabled:${source.bookSourceUrl}")
+            val actionable = action != null
+            action?.recycle()
+            idle && actionable
+        }
+        fun clickOnce(identifier: String) {
+            var action: AccessibilityNodeInfo? = null
+            awaitPhase("Manager popup control did not advertise an owned click: $identifier") {
+                if (!nativeIdle()) return@awaitPhase false
+                action = ownedAction(identifier)
+                if (action == null) {
+                    val node = renderedNode(identifier = identifier)
+                    diagnostic += if (node == null) ", controlMissing=true" else {
+                        val flags = ", controlVisible=${node.isVisibleToUser}, " +
+                            "controlEnabled=${node.isEnabled}, controlClickable=${node.isClickable}, " +
+                            "controlClick=${node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }}"
+                        node.recycle()
+                        flags
+                    }
+                }
+                action != null
+            }
+            val target = requireNotNull(action)
+            try {
+                assertTrue("Manager popup rejected its single advertised click: $identifier; $diagnostic",
+                    target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            } finally {
+                target.recycle()
+            }
+        }
+        clickOnce("source-manager-menu")
+        clickOnce("source-manager-action:online")
     }
 
     /** One Back after the actual IME viewport settles; every phase shares the old 30s budget. */
