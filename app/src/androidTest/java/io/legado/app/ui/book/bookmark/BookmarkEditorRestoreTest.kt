@@ -369,22 +369,51 @@ class BookmarkEditorRestoreTest {
             assertEquals(bookmark.bookText, initial.bookText)
             input(scenario, "text", "Draft text")
             input(scenario, "content", "Draft note")
-            var node: android.view.accessibility.AccessibilityNodeInfo? = null
-            until(SystemClock.uptimeMillis() + 30_000, "Owned focused note advertises selection action") {
-                node = actual(scenario, "content") { it.isEditable && it.isFocused && it.actionList.any { action -> action.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_SELECTION } }
-                node != null
-            }
-            try { assertTrue(node!!.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_SELECTION,
-                android.os.Bundle().apply {
-                    putInt(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 5)
-                    putInt(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 2)
-                })) } finally { node?.recycle() }
-            driver.await("native and actual reverse note selection") {
-                var native = false
-                scenario.onActivity { host -> val value = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).model.state.value
-                    native = value.contentStart == 5 && value.contentEnd == 2 && value.focused == "content" }
-                val actual = driver.node("bookmark-editor-content")?.let { try { it.isFocused && it.textSelectionStart == 5 && it.textSelectionEnd == 2 } finally { it.recycle() } } ?: false
-                native && actual
+            val selectionDeadline = SystemClock.uptimeMillis() + 30_000
+            val selectionProbe = InputProbe(scenario, "content", "Draft note")
+            var selectionReceipt = "not observed"
+            try {
+                var node: android.view.accessibility.AccessibilityNodeInfo? = null
+                while (node == null && SystemClock.uptimeMillis() < selectionDeadline) {
+                    // Input can finish before the real IME shrinks the native window.
+                    // Reveal the already focused note only if that transition hid it;
+                    // never click it again or repeat the completed text input.
+                    val visible = ownedNode(scenario, "content")
+                    if (visible == null) {
+                        selectionProbe.sample("selectionFieldMissing")
+                        reveal(scenario, "content", selectionDeadline)
+                    }
+                    visible?.recycle()
+                    frame(scenario, selectionDeadline, requireInputConnection = true)
+                    node = actual(scenario, "content") { it.isEditable && it.isFocused && it.actionList.any { action -> action.id == android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_SELECTION } }
+                    if (node == null) SystemClock.sleep(minOf(25L, (selectionDeadline - SystemClock.uptimeMillis()).coerceAtLeast(0)))
+                }
+                assertNotNull("Owned focused note advertises selection action", node)
+                try { assertTrue(node!!.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_SELECTION,
+                    android.os.Bundle().apply {
+                        putInt(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 5)
+                        putInt(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 2)
+                    })) } finally { node?.recycle() }
+                until(selectionDeadline, "native and actual reverse note selection") {
+                    var native = false
+                    scenario.onActivity { host -> val value = (host.supportFragmentManager.findFragmentByTag("bookmark-test") as BookmarkDialog).model.state.value
+                        native = value.contentStart == 5 && value.contentEnd == 2 && value.focused == "content" }
+                    var current = actual(scenario, "content") { it.isEditable && it.isFocused }
+                    if (current == null && SystemClock.uptimeMillis() < selectionDeadline) {
+                        val visible = ownedNode(scenario, "content")
+                        if (visible == null) reveal(scenario, "content", selectionDeadline)
+                        visible?.recycle()
+                        frame(scenario, selectionDeadline, requireInputConnection = true)
+                        current = actual(scenario, "content") { it.isEditable && it.isFocused }
+                    }
+                    val actual = current?.let { try { it.textSelectionStart == 5 && it.textSelectionEnd == 2 } finally { it.recycle() } } ?: false
+                    selectionReceipt = "nativeReverseFocusACK=$native,actualReverseFocusACK=$actual"
+                    native && actual
+                }
+            } catch (failure: AssertionError) {
+                selectionProbe.fail(failure)
+                failure.addSuppressed(AssertionError(selectionReceipt))
+                throw failure
             }
             // Read the durable repository receipt rather than assuming debounce elapsed.
             driver.await("owned bookmark draft durable before recreate") {
