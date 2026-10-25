@@ -98,6 +98,36 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @allBookmarksTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'All bookmarks'**
+  String get allBookmarksTitle;
+
+  /// No description provided for @allBookmarksExportJson.
+  ///
+  /// In en, this message translates to:
+  /// **'Export JSON'**
+  String get allBookmarksExportJson;
+
+  /// No description provided for @allBookmarksExportMarkdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Export Markdown'**
+  String get allBookmarksExportMarkdown;
+
+  /// No description provided for @allBookmarksRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get allBookmarksRetry;
+
+  /// No description provided for @allBookmarksError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load bookmarks. Try again.'**
+  String get allBookmarksError;
+
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
@@ -409,6 +439,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Licenses'**
   String get licensesTitle;
+
+  /// No description provided for @appLogsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Logs'**
+  String get appLogsTitle;
+
+  /// No description provided for @appLogsExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get appLogsExport;
+
+  /// No description provided for @appLogsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No logs'**
+  String get appLogsEmpty;
+
+  /// No description provided for @appLogsShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to share logs'**
+  String get appLogsShareFailed;
+
+  /// No description provided for @appLogsClearConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all logs?'**
+  String get appLogsClearConfirm;
+
+  /// No description provided for @diagnosticsClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get diagnosticsClose;
+
+  /// No description provided for @diagnosticsClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get diagnosticsClear;
+
+  /// No description provided for @diagnosticsCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get diagnosticsCancel;
+
+  /// No description provided for @diagnosticsRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get diagnosticsRetry;
+
+  /// No description provided for @diagnosticsError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load logs. Try again.'**
+  String get diagnosticsError;
+
+  /// No description provided for @diagnosticsDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get diagnosticsDetails;
+
+  /// No description provided for @diagnosticsPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous'**
+  String get diagnosticsPrevious;
+
+  /// No description provided for @diagnosticsNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get diagnosticsNext;
+
+  /// No description provided for @bookmarkEditorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmark'**
+  String get bookmarkEditorTitle;
+
+  /// No description provided for @bookmarkEditorText.
+  ///
+  /// In en, this message translates to:
+  /// **'Content'**
+  String get bookmarkEditorText;
+
+  /// No description provided for @bookmarkEditorContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Note'**
+  String get bookmarkEditorContent;
+
+  /// No description provided for @bookmarkEditorDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get bookmarkEditorDelete;
+
+  /// No description provided for @bookmarkEditorCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get bookmarkEditorCancel;
+
+  /// No description provided for @bookmarkEditorConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get bookmarkEditorConfirm;
+
+  /// No description provided for @bookmarkEditorBridgeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmark editor is unavailable. Retry.'**
+  String get bookmarkEditorBridgeError;
 
   /// No description provided for @shelfOptions.
   ///
@@ -889,6 +1039,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The search update was rejected and restored. Retry or edit the search again before saving or replacing.'**
   String get codeEditorSearchRejected;
+
+  /// No description provided for @crashLogsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Crash logs'**
+  String get crashLogsTitle;
+
+  /// No description provided for @crashLogsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No crash logs'**
+  String get crashLogsEmpty;
 
   /// No description provided for @dictionaryEditorTitle.
   ///

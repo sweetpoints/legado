@@ -10,6 +10,21 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get allBookmarksTitle => 'All bookmarks';
+
+  @override
+  String get allBookmarksExportJson => 'Export JSON';
+
+  @override
+  String get allBookmarksExportMarkdown => 'Export Markdown';
+
+  @override
+  String get allBookmarksRetry => 'Retry';
+
+  @override
+  String get allBookmarksError => 'Unable to load bookmarks. Try again.';
+
+  @override
   String get appTitle => 'Legado';
 
   @override
@@ -174,6 +189,67 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get licensesTitle => 'Licenses';
+
+  @override
+  String get appLogsTitle => 'Logs';
+
+  @override
+  String get appLogsExport => 'Export';
+
+  @override
+  String get appLogsEmpty => 'No logs';
+
+  @override
+  String get appLogsShareFailed => 'Unable to share logs';
+
+  @override
+  String get appLogsClearConfirm => 'Clear all logs?';
+
+  @override
+  String get diagnosticsClose => 'Close';
+
+  @override
+  String get diagnosticsClear => 'Clear';
+
+  @override
+  String get diagnosticsCancel => 'Cancel';
+
+  @override
+  String get diagnosticsRetry => 'Retry';
+
+  @override
+  String get diagnosticsError => 'Unable to load logs. Try again.';
+
+  @override
+  String get diagnosticsDetails => 'Details';
+
+  @override
+  String get diagnosticsPrevious => 'Previous';
+
+  @override
+  String get diagnosticsNext => 'Next';
+
+  @override
+  String get bookmarkEditorTitle => 'Bookmark';
+
+  @override
+  String get bookmarkEditorText => 'Content';
+
+  @override
+  String get bookmarkEditorContent => 'Note';
+
+  @override
+  String get bookmarkEditorDelete => 'Delete';
+
+  @override
+  String get bookmarkEditorCancel => 'Cancel';
+
+  @override
+  String get bookmarkEditorConfirm => 'OK';
+
+  @override
+  String get bookmarkEditorBridgeError =>
+      'Bookmark editor is unavailable. Retry.';
 
   @override
   String get shelfOptions => 'Bookshelf options';
@@ -422,6 +498,12 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get codeEditorSearchRejected =>
       'The search update was rejected and restored. Retry or edit the search again before saving or replacing.';
+
+  @override
+  String get crashLogsTitle => 'Crash logs';
+
+  @override
+  String get crashLogsEmpty => 'No crash logs';
 
   @override
   String get dictionaryEditorTitle => 'Dictionary rule';

@@ -11,10 +11,6 @@
   "scope": {
     "screensAndRoutes": [
       "app/src/main/java/io/legado/app/ui/about/AboutScreen.kt",
-      "app/src/main/java/io/legado/app/ui/about/AppLogsRoute.kt",
-      "app/src/main/java/io/legado/app/ui/about/AppLogsScreen.kt",
-      "app/src/main/java/io/legado/app/ui/about/CrashLogsRoute.kt",
-      "app/src/main/java/io/legado/app/ui/about/CrashLogsScreen.kt",
       "app/src/main/java/io/legado/app/ui/about/ReadingHistoryRoute.kt",
       "app/src/main/java/io/legado/app/ui/about/ReadingHistoryScreen.kt",
       "app/src/main/java/io/legado/app/ui/about/UpdateDialogRoute.kt",
@@ -57,10 +53,6 @@
       "app/src/main/java/io/legado/app/ui/book/audio/AudioSliderScreen.kt",
       "app/src/main/java/io/legado/app/ui/book/audio/config/AudioSkipCreditsRoute.kt",
       "app/src/main/java/io/legado/app/ui/book/audio/config/AudioSkipCreditsScreen.kt",
-      "app/src/main/java/io/legado/app/ui/book/bookmark/AllBookmarksRoute.kt",
-      "app/src/main/java/io/legado/app/ui/book/bookmark/AllBookmarksScreen.kt",
-      "app/src/main/java/io/legado/app/ui/book/bookmark/BookmarkEditorRoute.kt",
-      "app/src/main/java/io/legado/app/ui/book/bookmark/BookmarkEditorScreen.kt",
       "app/src/main/java/io/legado/app/ui/book/cache/BookCacheRoute.kt",
       "app/src/main/java/io/legado/app/ui/book/cache/BookCacheScreen.kt",
       "app/src/main/java/io/legado/app/ui/book/changecover/ChangeCoverRoute.kt",
