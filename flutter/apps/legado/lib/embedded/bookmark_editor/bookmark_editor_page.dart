@@ -162,177 +162,197 @@ class _EditorState extends State<BookmarkEditorPage> {
     final enabled = s?.canEdit == true;
     final mutation =
         enabled && pending.isEmpty && !bridge.hasRejectedField && !failed;
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) unawaited(command('cancel'));
-      },
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SafeArea(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: tagged(
-                  'outside',
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: s?.saving == true
-                        ? null
-                        : () => unawaited(command('cancel')),
-                    child: const ColoredBox(color: Colors.transparent),
+    // BookmarkDialog is a floating, non-fullscreen Android adjustResize host.
+    // Its native FlutterView is already fitted above the IME. Consume only this
+    // host's retained bottom inset; fullscreen hosts need their own IME policy.
+    return MediaQuery.removeViewInsets(
+      context: context,
+      removeBottom: true,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) unawaited(command('cancel'));
+        },
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          backgroundColor: Colors.transparent,
+          body: SafeArea(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: tagged(
+                    'outside',
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: s?.saving == true
+                          ? null
+                          : () => unawaited(command('cancel')),
+                      child: const ColoredBox(color: Colors.transparent),
+                    ),
                   ),
                 ),
-              ),
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: GestureDetector(
-                    onTap: () {},
-                    child: Card(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: MediaQuery.sizeOf(context).height * .85,
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: tagged(
-                                'heading',
-                                Text(
-                                  l.bookmarkEditorTitle,
-                                  style: Theme.of(context).textTheme.titleLarge,
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: GestureDetector(
+                      onTap: () {},
+                      child: Card(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: constraints.maxHeight * .85,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: tagged(
+                                    'heading',
+                                    Text(
+                                      l.bookmarkEditorTitle,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: tagged(
-                                'chapter',
-                                Text(s?.raw['chapter'] as String? ?? ''),
-                              ),
-                            ),
-                            if (s == null || s.loading || s.saving)
-                              tagged(
-                                'working',
-                                const LinearProgressIndicator(),
-                              ),
-                            Flexible(
-                              child: SingleChildScrollView(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  children: [
-                                    if (failed || s?.error != null)
-                                      tagged(
-                                        'error',
-                                        Text(
-                                          s?.error ??
-                                              l.bookmarkEditorBridgeError,
-                                          style: TextStyle(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .error,
-                                          ),
-                                        ),
-                                      ),
-                                    if ((s == null && failed) ||
-                                        s?.loadFailed == true)
-                                      tagged(
-                                        s == null ? 'bridge-retry' : 'retry',
-                                        TextButton(
-                                          onPressed: () => unawaited(
-                                            s == null
-                                                ? start()
-                                                : command('retry'),
-                                          ),
-                                          child: Text(l.retry),
-                                        ),
-                                      ),
-                                    for (final key in bookmarkFields)
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          bottom: 12,
-                                        ),
-                                        child: tagged(
-                                          key,
-                                          TextField(
-                                            controller: controllers[key],
-                                            focusNode: focuses[key],
-                                            enabled: enabled,
-                                            maxLines: 4,
-                                            textInputAction: key == 'text'
-                                                ? TextInputAction.next
-                                                : TextInputAction.done,
-                                            onSubmitted: (_) {
-                                              if (key == 'text') {
-                                                focuses['content']!
-                                                    .requestFocus();
-                                              } else {
-                                                focuses[key]!.unfocus();
-                                              }
-                                            },
-                                            decoration: InputDecoration(
-                                              labelText: key == 'text'
-                                                  ? l.bookmarkEditorText
-                                                  : l.bookmarkEditorContent,
-                                              border:
-                                                  const OutlineInputBorder(),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
+                                  child: tagged(
+                                    'chapter',
+                                    Text(s?.raw['chapter'] as String? ?? ''),
+                                  ),
+                                ),
+                                if (s == null || s.loading || s.saving)
+                                  tagged(
+                                    'working',
+                                    const LinearProgressIndicator(),
+                                  ),
+                                Flexible(
+                                  child: SingleChildScrollView(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      children: [
+                                        if (failed || s?.error != null)
+                                          tagged(
+                                            'error',
+                                            Text(
+                                              s?.error ??
+                                                  l.bookmarkEditorBridgeError,
+                                              style: TextStyle(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .error,
+                                              ),
                                             ),
                                           ),
+                                        if ((s == null && failed) ||
+                                            s?.loadFailed == true)
+                                          tagged(
+                                            s == null
+                                                ? 'bridge-retry'
+                                                : 'retry',
+                                            TextButton(
+                                              onPressed: () => unawaited(
+                                                s == null
+                                                    ? start()
+                                                    : command('retry'),
+                                              ),
+                                              child: Text(l.retry),
+                                            ),
+                                          ),
+                                        for (final key in bookmarkFields)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 12,
+                                            ),
+                                            child: tagged(
+                                              key,
+                                              TextField(
+                                                controller: controllers[key],
+                                                focusNode: focuses[key],
+                                                enabled: enabled,
+                                                maxLines: 4,
+                                                textInputAction: key == 'text'
+                                                    ? TextInputAction.next
+                                                    : TextInputAction.done,
+                                                onSubmitted: (_) {
+                                                  if (key == 'text') {
+                                                    focuses['content']!
+                                                        .requestFocus();
+                                                  } else {
+                                                    focuses[key]!.unfocus();
+                                                  }
+                                                },
+                                                decoration: InputDecoration(
+                                                  labelText: key == 'text'
+                                                      ? l.bookmarkEditorText
+                                                      : l.bookmarkEditorContent,
+                                                  border:
+                                                      const OutlineInputBorder(),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Row(
+                                    children: [
+                                      if (s?.raw['canDelete'] == true)
+                                        tagged(
+                                          'delete',
+                                          TextButton(
+                                            onPressed: mutation
+                                                ? () => unawaited(
+                                                    command('delete'),
+                                                  )
+                                                : null,
+                                            child: Text(l.bookmarkEditorDelete),
+                                          ),
+                                        ),
+                                      const Spacer(),
+                                      tagged(
+                                        'cancel',
+                                        TextButton(
+                                          onPressed: s?.saving == true
+                                              ? null
+                                              : () => unawaited(
+                                                  command('cancel'),
+                                                ),
+                                          child: Text(l.bookmarkEditorCancel),
                                         ),
                                       ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Row(
-                                children: [
-                                  if (s?.raw['canDelete'] == true)
-                                    tagged(
-                                      'delete',
-                                      TextButton(
-                                        onPressed: mutation
-                                            ? () => unawaited(command('delete'))
-                                            : null,
-                                        child: Text(l.bookmarkEditorDelete),
+                                      tagged(
+                                        'confirm',
+                                        TextButton(
+                                          onPressed: mutation
+                                              ? () => unawaited(
+                                                  command('confirm'),
+                                                )
+                                              : null,
+                                          child: Text(l.bookmarkEditorConfirm),
+                                        ),
                                       ),
-                                    ),
-                                  const Spacer(),
-                                  tagged(
-                                    'cancel',
-                                    TextButton(
-                                      onPressed: s?.saving == true
-                                          ? null
-                                          : () => unawaited(command('cancel')),
-                                      child: Text(l.bookmarkEditorCancel),
-                                    ),
+                                    ],
                                   ),
-                                  tagged(
-                                    'confirm',
-                                    TextButton(
-                                      onPressed: mutation
-                                          ? () => unawaited(command('confirm'))
-                                          : null,
-                                      child: Text(l.bookmarkEditorConfirm),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
