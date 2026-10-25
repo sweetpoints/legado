@@ -136,13 +136,35 @@ class TxtTocRuleEditorScreenTest {
         driver.click("txt-toc-editor-menu"); driver.click("txt-toc-editor-paste")
         driver.await("Pasted native fields") { state { it.name == renamed && it.regex == "^New" && it.replacement == "return result" && it.example == "New example" } }
         reveal("Example"); driver.await("Actual pasted example") { driver.text("txt-toc-editor-Example") == "New example" }
-        driver.click("txt-toc-editor-menu"); driver.click("txt-toc-editor-copy")
+        var beforeCopy: String? = null
+        scenario.onActivity { beforeCopy = it.getClipText() }
+        assertNotNull("Actual pasted clipboard baseline must be available before Copy", beforeCopy)
+        val clipboard = instrumentation.targetContext.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val copyEvents = java.util.concurrent.atomic.AtomicInteger()
+        val listener = android.content.ClipboardManager.OnPrimaryClipChangedListener { copyEvents.incrementAndGet() }
+        scenario.onActivity { clipboard.addPrimaryClipChangedListener(listener) }
         var copied: String? = null
-        driver.await("Actual clipboard exports acknowledged current draft") {
-            scenario.onActivity { copied = it.getClipText() }
-            runCatching { com.google.gson.JsonParser.parseString(copied).asJsonObject["name"].asString == renamed }.getOrDefault(false)
+        try {
+            driver.click("txt-toc-editor-menu"); driver.click("txt-toc-editor-copy")
+            driver.await("Actual clipboard content changed after single Copy") {
+                scenario.onActivity { copied = it.getClipText() }
+                copied != null && copied != beforeCopy
+            }
+        } catch (failure: AssertionError) {
+            var hostState = "host unavailable"
+            scenario.onActivity { host ->
+                val editor = dialog(host)
+                val state = editor?.viewModel?.state?.value
+                hostState = "lifecycle=${editor?.lifecycle?.currentState}, loading=${state?.loading}, " +
+                    "saving=${state?.saving}, finished=${state?.finished}, pendingCallback=${state?.pendingCallback}, errorPresent=${state?.error != null}"
+            }
+            throw AssertionError("Copy acknowledgement failed; baselineLength=${beforeCopy?.length}, " +
+                "currentLength=${copied?.length}, unchanged=${copied == beforeCopy}, primaryClipEvents=${copyEvents.get()}, $hostState", failure)
+        } finally {
+            scenario.onActivity { clipboard.removePrimaryClipChangedListener(listener) }
         }
         val json = com.google.gson.JsonParser.parseString(copied).asJsonObject
+        assertEquals(renamed, json["name"].asString)
         assertEquals(id, json["id"].asLong); assertEquals(431, json["serialNumber"].asInt); assertFalse(json["enable"].asBoolean)
         assertEquals("^New", json["rule"].asString); assertEquals("return result", json["replacement"].asString); assertEquals("New example", json["example"].asString)
         driver.click("txt-toc-editor-save"); closed(); assertEquals(renamed, row()?.name)
