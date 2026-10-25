@@ -120,7 +120,7 @@ class ReadingLayoutTransitionTest {
                             .filterIsInstance<ClickActionConfigDialog>()
                             .forEach { it.dismiss() }
                     }
-                    awaitReader(scenario, book.bookUrl, false)
+                    awaitStableReader(scenario, book.bookUrl, false)
                     val initial = capture(scenario, "layout-cover-before")
                     // Observe this failing transition without forcing layout, replacing callbacks,
                     // or waiting for the expected paragraph. All existing readiness/assertions stay.
@@ -164,7 +164,7 @@ class ReadingLayoutTransitionTest {
                     lateinit var enteredScroll: ReadingSnapshot
                     try {
                         switchStyle(scenario, 1)
-                        awaitReader(scenario, book.bookUrl, true)
+                        awaitStableReader(scenario, book.bookUrl, true)
                         enteredScroll = capture(scenario, "layout-scroll-before-swipe")
                     } finally {
                         scenario.onActivity { observedView.viewTreeObserver.removeOnPreDrawListener(observer) }
@@ -189,7 +189,7 @@ class ReadingLayoutTransitionTest {
                     )
                     // Recreating a scroll reader must not recursively inflate the Activity binding.
                     scenario.recreate()
-                    awaitReader(scenario, book.bookUrl, true)
+                    awaitStableReader(scenario, book.bookUrl, true)
                     onView(withId(R.id.read_view)).perform(swipeUp())
                     compose.waitForIdle()
                     await {
@@ -219,7 +219,7 @@ class ReadingLayoutTransitionTest {
                         ReadBook.curTextChapter !== previousChapter &&
                             ReadBook.curTextChapter?.isCompleted == true
                     }
-                    awaitReader(scenario, book.bookUrl, true)
+                    awaitStableReader(scenario, book.bookUrl, true)
                     scenario.onActivity { activity ->
                         val view = activity.findViewById<ReadView>(R.id.read_view)
                         assertEquals(
@@ -235,7 +235,7 @@ class ReadingLayoutTransitionTest {
                     }
                     capture(scenario, "layout-scroll-before-preset")
                     switchStyle(scenario, 2)
-                    awaitReader(scenario, book.bookUrl, true)
+                    awaitStableReader(scenario, book.bookUrl, true)
                     val sameMode = capture(scenario, "layout-scroll-same-mode")
                     assertEquals(
                         "Changing between scroll presets must preserve the source character",
@@ -248,10 +248,10 @@ class ReadingLayoutTransitionTest {
                         sameMode.visiblePosition?.paragraph,
                     )
                     switchStyle(scenario, 0)
-                    awaitReader(scenario, book.bookUrl, false)
+                    awaitStableReader(scenario, book.bookUrl, false)
                     val returned = capture(scenario, "layout-cover-returned")
                     scenario.recreate()
-                    awaitReader(scenario, book.bookUrl, false)
+                    awaitStableReader(scenario, book.bookUrl, false)
                     val reopened = capture(scenario, "layout-cover-reopened")
                     assertEquals(
                         "Horizontal pages must not retain a vertical scroll offset",
@@ -373,6 +373,97 @@ class ReadingLayoutTransitionTest {
             ready
         }
         compose.waitForIdle()
+    }
+
+    /** This regression's baseline must belong to the completed layout, not a resized old chapter. */
+    private fun awaitStableReader(scenario: ActivityScenario<ReadBookActivity>, url: String, scroll: Boolean) {
+        val pendingSize = ChapterProvider::class.java.getDeclaredField("upViewSizeRunnable").apply { isAccessible = true }
+        val loadingJobs = ReadBook::class.java.getDeclaredField("chapterLoadingJobs").apply { isAccessible = true }
+        val layoutField = io.legado.app.ui.book.read.page.entities.TextChapter::class.java.getDeclaredField("layout").apply { isAccessible = true }
+        val layoutClass = io.legado.app.ui.book.read.page.provider.TextChapterLayout::class.java
+        val layoutWidth = layoutClass.getDeclaredField("visibleWidth").apply { isAccessible = true }
+        val layoutHeight = layoutClass.getDeclaredField("visibleHeight").apply { isAccessible = true }
+        val pageOffset = ContentTextView::class.java.getDeclaredField("pageOffset").apply { isAccessible = true }
+        var candidate: List<Any?>? = null
+        var frameCandidate: List<Any?>? = null
+        var frameCallback: android.view.Choreographer.FrameCallback? = null
+        var generation = 0
+        val diagnostics = arrayListOf<String>()
+        var lastSample = "not sampled"
+        try {
+            // The frame and every readiness condition share this one original 30s wait.
+            compose.waitUntil(timeoutMillis = 30_000) {
+                var ready = false
+                scenario.onActivity { activity ->
+                    val view = activity.findViewById<ReadView>(R.id.read_view)
+                    val content = view.curPage.findViewById<ContentTextView>(R.id.content_text_view)
+                    val page = view.curPage.textPage
+                    val chapter = ReadBook.curTextChapter
+                    val layout = chapter?.let(layoutField::get)
+                    val sourceWidth = layout?.let(layoutWidth::getInt)
+                    val sourceHeight = layout?.let(layoutHeight::getInt)
+                    val job = (loadingJobs.get(ReadBook) as Map<*, *>)[ReadBook.durChapterIndex] as? io.legado.app.help.coroutine.Coroutine<*>
+                    val hasPendingSize = pendingSize.get(ChapterProvider) != null
+                    val sourceGeometry = sourceWidth == ChapterProvider.visibleWidth && sourceHeight == ChapterProvider.visibleHeight
+                    val actualFactory = chapter?.isCompleted == true && !page.isMsgPage && ReadBook.msg == null &&
+                        page === view.pageFactory.curPage
+                    val layoutRequested = view.isLayoutRequested || view.curPage.isLayoutRequested || content.isLayoutRequested
+                    val valid = !hasPendingSize && !layoutRequested && content.width > 0 && content.height > 0 &&
+                        content.width == ChapterProvider.viewWidth && content.height == ChapterProvider.viewHeight &&
+                        sourceGeometry && actualFactory && (job == null || job.isCompleted) &&
+                        ReadBook.book?.bookUrl == url && chapter?.chapter?.bookUrl == url &&
+                        chapter?.isCompleted == true && page.textChapter === chapter && page.lines.size > 3 &&
+                        view.isScroll == scroll && view.pageDelegate?.isRunning != true && activity.bottomDialog == 0
+                    val signature = listOf(chapter, page, job, sourceWidth, sourceHeight,
+                        page.index, page.height, page.lines.firstOrNull()?.chapterPosition,
+                        page.lines.firstOrNull()?.lineTop, page.lines.lastOrNull()?.lineBottom,
+                        content.width, content.height, content.left, content.top, content.right, content.bottom,
+                        ChapterProvider.viewWidth, ChapterProvider.viewHeight, ChapterProvider.visibleWidth, ChapterProvider.visibleHeight,
+                        ReadBook.durChapterPos, view.getReadPositionVersion(), pageOffset.getInt(content))
+                    if (!valid || candidate != signature) {
+                        generation++
+                        frameCallback?.let { android.view.Choreographer.getInstance().removeFrameCallback(it) }
+                        frameCallback = null
+                        frameCandidate = null
+                        candidate = if (valid) signature else null
+                        if (valid) {
+                            val token = generation
+                            val captured = signature
+                            frameCallback = android.view.Choreographer.FrameCallback {
+                                if (token == generation) {
+                                    frameCandidate = captured
+                                    frameCallback = null
+                                }
+                            }.also { android.view.Choreographer.getInstance().postFrameCallback(it) }
+                        }
+                    }
+                    ready = valid && candidate == signature && frameCandidate == signature
+                    val sample = "scroll=$scroll pendingSize=$hasPendingSize layoutRequested=$layoutRequested " +
+                        "content=${content.width}x${content.height} provider=${ChapterProvider.viewWidth}x${ChapterProvider.viewHeight} " +
+                        "source=${sourceWidth}x${sourceHeight} visible=${ChapterProvider.visibleWidth}x${ChapterProvider.visibleHeight} " +
+                        "sourceGeometry=$sourceGeometry actualFactory=$actualFactory jobCompleted=${job?.isCompleted} " +
+                        "chapterCompleted=${chapter?.isCompleted} bound=${page.textChapter === chapter} " +
+                        "chapter=${System.identityHashCode(chapter)} page=${page.index} pageHeight=${page.height} " +
+                        "saved=${ReadBook.durChapterPos} offset=${pageOffset.getInt(content)} running=${view.pageDelegate?.isRunning} " +
+                        "bottomDialog=${activity.bottomDialog} frameStable=${frameCandidate == signature}"
+                    if (sample != lastSample && diagnostics.size < 24) diagnostics += sample
+                    lastSample = sample
+                }
+                ready
+            }
+            compose.waitForIdle()
+        } catch (failure: Throwable) {
+            val output = File(context.getExternalFilesDir("ui-regression"), "layout-strict-readiness-failure.txt")
+            output.parentFile?.mkdirs()
+            output.appendText(diagnostics.joinToString("\n") + "\nlast=$lastSample\n")
+            throw failure
+        } finally {
+            scenario.onActivity {
+                generation++
+                frameCallback?.let { android.view.Choreographer.getInstance().removeFrameCallback(it) }
+                frameCallback = null
+            }
+        }
     }
 
     private data class SourcePosition(val paragraph: Int, val offset: Int, val context: String)
