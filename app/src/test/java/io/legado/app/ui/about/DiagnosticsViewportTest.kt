@@ -33,4 +33,13 @@ class DiagnosticsViewportTest {
         val cleared = DiagnosticsViewport.project(emptyList(), saved, settled = true)
         assertEquals(DiagnosticsViewportCheckpoint(0, 0, 0.0, null), cleared.checkpoint)
     }
+    @Test fun explicitPreviousUsesDisplayedPageAfterPartialClearFailureWithoutDiscardingPendingCheckpoint() {
+        val saved = DiagnosticsViewportCheckpoint(2, 4, 12.0, null)
+        val partialFailure = DiagnosticsViewport.project((0..149).map { "remaining-$it" }, saved, settled = false)
+        assertEquals(1, partialFailure.page)
+        assertEquals(saved, partialFailure.checkpoint)
+        assertEquals(0, DiagnosticsViewport.move(partialFailure.checkpoint.page, 150, -1))
+        assertEquals(1, DiagnosticsViewport.move(partialFailure.checkpoint.page, 150, 1))
+        assertEquals(0, DiagnosticsViewport.move(2, 0, -1))
+    }
 }
