@@ -333,7 +333,13 @@ class AllBookmarksHostTest {
                 // No polling, extra Back, state mutation or change to the original waits.
                 runCatching { android.util.Log.i("AllBookmarksPicker", "afterSingleBack ${afterBackSnapshot()}") }
                 readyPhase = "parent-after-single-back"
-                actual.ready()
+                // This boundary still belongs to the native Compose dialog. Its
+                // test frame clock must be serviced until cancellation/effects
+                // return to Flutter; use the standard waiter with the same 30s
+                // wall-clock budget and the unchanged actual identifier predicate.
+                compose.waitUntil(timeoutMillis = 30_000) {
+                    actual.driver.node("all-bookmarks-list")?.let { it.recycle(); true } == true
+                }
                 actual.driver.await("Native directory cancel consumes ticket without starting export") {
                     var settled = false
                     scenario.onActivity { settled = it.model.waitingDirectory() == null && !it.model.state.value.exporting && it.model.state.value.effect == null }
